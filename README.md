@@ -4,6 +4,7 @@ A command-line tool for managing the lifecycle of [vulhub](https://github.com/vu
 
 [![CI](https://github.com/polite-007/vulhub-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/polite-007/vulhub-cli/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/polite-007/vulhub-cli)](https://github.com/polite-007/vulhub-cli/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -28,18 +29,15 @@ An environment can be referenced either by its **path** (`activemq/CVE-2023-4660
 Download the binary from the [latest release](https://github.com/polite-007/vulhub-cli/releases/latest) and put it on your `PATH`:
 
 ```sh
-# Set this to the latest tag shown on the releases page.
-VERSION=v0.1.0
-
-curl -LO "https://github.com/polite-007/vulhub-cli/releases/download/${VERSION}/vulhub-cli-${VERSION}-linux-amd64"
-curl -LO "https://github.com/polite-007/vulhub-cli/releases/download/${VERSION}/SHA256SUMS"
+curl -LO https://github.com/polite-007/vulhub-cli/releases/latest/download/vulhub-cli-linux-amd64
+curl -LO https://github.com/polite-007/vulhub-cli/releases/latest/download/SHA256SUMS
 sha256sum -c SHA256SUMS
 
-chmod +x "vulhub-cli-${VERSION}-linux-amd64"
-sudo mv "vulhub-cli-${VERSION}-linux-amd64" /usr/local/bin/vulhub
+chmod +x vulhub-cli-linux-amd64
+sudo mv vulhub-cli-linux-amd64 /usr/local/bin/vulhub
 ```
 
-The binary is statically linked and has no runtime dependencies.
+The asset names carry no version, so these URLs are stable across releases; the version is the release tag. The binary is statically linked and has no runtime dependencies.
 
 ## Quick start
 
@@ -133,4 +131,4 @@ All tests enter through a single seam, `cli.Run`: they supply command-line argum
 
 ## License
 
-No license has been selected for this project yet. Until one is added, the default is that all rights are reserved — which is not the intent for a project published here, but it is the legal reality. If you intend to use or contribute to this software, please open an issue to get that resolved first.
+Released under the [MIT License](LICENSE).

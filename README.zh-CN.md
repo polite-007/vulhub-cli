@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/polite-007/vulhub-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/polite-007/vulhub-cli/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/polite-007/vulhub-cli)](https://github.com/polite-007/vulhub-cli/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) · **简体中文**
 
@@ -28,18 +29,15 @@ vulhub-cli 在本地维护一份 vulhub 检出，并提供命令来列出、检�
 从[最新发布](https://github.com/polite-007/vulhub-cli/releases/latest)下载二进制并放入 `PATH`：
 
 ```sh
-# 把 VERSION 设为发布页上显示的最新 tag
-VERSION=v0.1.0
-
-curl -LO "https://github.com/polite-007/vulhub-cli/releases/download/${VERSION}/vulhub-cli-${VERSION}-linux-amd64"
-curl -LO "https://github.com/polite-007/vulhub-cli/releases/download/${VERSION}/SHA256SUMS"
+curl -LO https://github.com/polite-007/vulhub-cli/releases/latest/download/vulhub-cli-linux-amd64
+curl -LO https://github.com/polite-007/vulhub-cli/releases/latest/download/SHA256SUMS
 sha256sum -c SHA256SUMS
 
-chmod +x "vulhub-cli-${VERSION}-linux-amd64"
-sudo mv "vulhub-cli-${VERSION}-linux-amd64" /usr/local/bin/vulhub
+chmod +x vulhub-cli-linux-amd64
+sudo mv vulhub-cli-linux-amd64 /usr/local/bin/vulhub
 ```
 
-该二进制为静态链接，没有运行时依赖。
+资产名不含版本号，因此这些地址在各次发布之间保持稳定，版本由 release tag 体现。该二进制为静态链接，没有运行时依赖。
 
 ## 快速开始
 
@@ -133,4 +131,4 @@ go test ./...
 
 ## 许可
 
-本项目尚未选定许可证。在许可证加入之前，默认状态是保留所有权利——这并非在此发布项目的本意，但它是当前的法律事实。如果你打算使用或贡献本项目，请先开 issue 把这件事解决掉。
+基于 [MIT 许可证](LICENSE) 发布。

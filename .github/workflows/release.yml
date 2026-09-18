@@ -19,6 +19,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # 资产名故意不带版本号：版本由 tag 体现。
+      # 这样 https://.../releases/latest/download/vulhub-cli-linux-amd64
+      # 这个稳定地址才可用，安装说明里才不必跟着版本号改。
       - name: 构建 linux-amd64
         env:
           CGO_ENABLED: "0"
@@ -26,19 +29,17 @@ jobs:
           GOARCH: amd64
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o dist/vulhub .
-          cp dist/vulhub dist/vulhub-cli-${GITHUB_REF_NAME}-linux-amd64
-          rm dist/vulhub
+          go build -trimpath -ldflags="-s -w" -o dist/vulhub-cli-linux-amd64 .
 
       - name: 校验产物是静态二进制
         run: |
-          file dist/vulhub-cli-${GITHUB_REF_NAME}-linux-amd64
-          file dist/vulhub-cli-${GITHUB_REF_NAME}-linux-amd64 | grep -q "statically linked"
+          file dist/vulhub-cli-linux-amd64
+          file dist/vulhub-cli-linux-amd64 | grep -q "statically linked"
 
       - name: 打校验和
         run: |
           cd dist
-          sha256sum vulhub-cli-${GITHUB_REF_NAME}-linux-amd64 > SHA256SUMS
+          sha256sum vulhub-cli-linux-amd64 > SHA256SUMS
           cat SHA256SUMS
 
       - name: 创建 Release 并上传制品
@@ -46,7 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            dist/vulhub-cli-${GITHUB_REF_NAME}-linux-amd64 \
+            dist/vulhub-cli-linux-amd64 \
             dist/SHA256SUMS \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes
