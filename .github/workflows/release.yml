@@ -1,0 +1,52 @@
+name: Release
+
+# 打 tag 就出制品。当前只支撑 linux-amd64。
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 构建 linux-amd64
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w" -o dist/vulhub .
+          cp dist/vulhub dist/vulhub-cli-${GITHUB_REF_NAME}-linux-amd64
+          rm dist/vulhub
+
+      - name: 校验产物是静态二进制
+        run: |
+          file dist/vulhub-cli-${GITHUB_REF_NAME}-linux-amd64
+          file dist/vulhub-cli-${GITHUB_REF_NAME}-linux-amd64 | grep -q "statically linked"
+
+      - name: 打校验和
+        run: |
+          cd dist
+          sha256sum vulhub-cli-${GITHUB_REF_NAME}-linux-amd64 > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: 创建 Release 并上传制品
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/vulhub-cli-${GITHUB_REF_NAME}-linux-amd64 \
+            dist/SHA256SUMS \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

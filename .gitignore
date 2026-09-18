@@ -2,6 +2,7 @@
 /vulhub
 /vulhub-cli
 /vulhub-cli.exe
+/dist/
 
 # 测试与覆盖率
 *.out

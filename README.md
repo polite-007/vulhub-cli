@@ -40,6 +40,20 @@ vulhub update               # 更新 vulhub 检出
 
 机器上需要 `git`、`docker`，以及 `docker compose`（v2）或 `docker-compose`（v1）之一。`init` 会做前置检查并明确告诉你缺的是哪一个。
 
+## 发布
+
+制品由 GitHub Actions 构建，当前只支撑 linux-amd64。
+
+- 推分支 / 开 PR：`.github/workflows/ci.yml` 跑 `gofmt`、`go vet`、`go test`，并构建一份 linux-amd64 作为 workflow 制品
+- **打 `v*` 标签**：`.github/workflows/release.yml` 构建静态二进制、打 SHA256 校验和、创建 GitHub Release 并挂上制品
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+要加平台时改这两个 workflow 里的 `GOOS`/`GOARCH` 矩阵即可，代码本身没有平台假设（目标平台只影响 `CGO_ENABLED=0` 这个构建开关）。
+
 ## 开发
 
 ```sh
