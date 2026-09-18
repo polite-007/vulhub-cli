@@ -49,13 +49,15 @@ func New(ctx context.Context, out io.Writer, in io.Reader, enabled bool) *Pager 
 	}
 }
 
-// Println 输出一行，必要时先等待用户按回车。
+// Println 输出一行，需要时先等用户按一次回车再放行下一屏。
 func (p *Pager) Println(line string) error {
 	if p.interrupted {
 		return ErrInterrupted
 	}
 
-	if p.enabled && !p.exhausted && p.written >= p.pageSize {
+	// 每满一屏等一次回车。按屏而不是按行等待：列表动辄上千条，
+	// 一行一次回车不实用，且终端回显回车留下的空白行会显得每两行之间都空一格。
+	if p.enabled && !p.exhausted && p.written > 0 && p.written%p.pageSize == 0 {
 		if !p.waitForEnter() {
 			// 输入耗尽时停止分页，把剩余内容直接放行，
 			// 不要让用户被困在半截输出里。

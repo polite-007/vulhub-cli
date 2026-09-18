@@ -163,19 +163,35 @@ func TestPagerIsDisabledWhenOutputIsNotATerminal(t *testing.T) {
 	}
 }
 
-func TestPagerReadsOneLinePerRowAfterTheFirstScreen(t *testing.T) {
+func TestPagerReadsOneEnterPerScreenful(t *testing.T) {
 	h := newHarness(t)
-	h.seed(seedMany(25)...)
+	h.seed(seedMany(45)...)
 
 	in := &countingReader{}
 	r := h.runInput(in, true, "ls").requireCode(t, 0)
 
-	// 首屏 20 行放行，剩下 5 行各要一次输入。
-	if in.reads != 5 {
-		t.Fatalf("期望读输入 5 次（25 行 - 首屏 20 行），实际 %d 次\n%s", in.reads, r.out)
+	// 首屏 20 行放行，之后每满 20 行要一次回车：45 行 = 首屏 + 2 屏。
+	if in.reads != 2 {
+		t.Fatalf("期望读输入 2 次（45 行按每屏 20 行分页），实际 %d 次\n%s", in.reads, r.out)
 	}
-	if lines := strings.Count(strings.TrimSpace(r.out), "\n") + 1; lines != 25 {
-		t.Fatalf("期望输出 25 行，实际 %d 行\n%s", lines, r.out)
+	if lines := strings.Count(strings.TrimSpace(r.out), "\n") + 1; lines != 45 {
+		t.Fatalf("期望输出 45 行，实际 %d 行\n%s", lines, r.out)
+	}
+}
+
+// 正好整数屏时，末尾不应再多等一次回车。
+func TestPagerDoesNotWaitAfterAnExactMultipleOfTheScreen(t *testing.T) {
+	h := newHarness(t)
+	h.seed(seedMany(40)...)
+
+	in := &countingReader{}
+	r := h.runInput(in, true, "ls").requireCode(t, 0)
+
+	if in.reads != 1 {
+		t.Fatalf("40 行 = 首屏 + 1 屏，期望只读输入 1 次，实际 %d 次\n%s", in.reads, r.out)
+	}
+	if lines := strings.Count(strings.TrimSpace(r.out), "\n") + 1; lines != 40 {
+		t.Fatalf("期望输出 40 行，实际 %d 行\n%s", lines, r.out)
 	}
 }
 
