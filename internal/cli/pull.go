@@ -1,22 +1,21 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
-	"strings"
 )
 
-// cmdPull 拉取靶场镜像。
 func (a *app) cmdPull(args []string) int {
-	pullAll, positional, err := parsePullArgs(args)
+	var pullAll bool
+	positional, err := parseFlags(args, map[string]*bool{"--all": &pullAll})
 	if err != nil {
-		return a.fail(err)
+		return a.usageError(err)
 	}
 	if pullAll && len(positional) > 0 {
-		return a.errorf("不能同时指定靶场与 --all")
+		return a.usageError(errors.New("不能同时指定靶场与 --all"))
 	}
 	if !pullAll && len(positional) == 0 {
-		fmt.Fprint(a.errOut, "用法：vulhub pull <靶场>[,…] 或 vulhub pull --all\n")
-		return ExitUsage
+		return a.usageError(errors.New("用法：vulhub pull <靶场>[,…] 或 vulhub pull --all"))
 	}
 	if err := a.deps.Compose.Check(a.ctx); err != nil {
 		return a.fail(err)
@@ -49,19 +48,4 @@ func (a *app) cmdPull(args []string) int {
 		}
 	}
 	return ExitOK
-}
-
-func parsePullArgs(args []string) (pullAll bool, positional []string, err error) {
-	for _, arg := range args {
-		switch arg {
-		case "--all":
-			pullAll = true
-		default:
-			if strings.HasPrefix(arg, "-") && arg != "-" {
-				return false, nil, fmt.Errorf("pull 不支持选项 %s", arg)
-			}
-			positional = append(positional, arg)
-		}
-	}
-	return pullAll, positional, nil
 }

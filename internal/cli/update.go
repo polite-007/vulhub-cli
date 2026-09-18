@@ -61,16 +61,12 @@ func (a *app) reportAffectedRunning(changed []string, s *state) {
 		exists[e.Path] = true
 	}
 
+	// 只认检出里的 compose 项目；这台机器上别人的项目不是靶场，不该被报进来。
 	running := map[string]bool{}
 	for _, c := range containers {
-		if c.WorkDir == "" {
-			continue
+		if rel, ok := a.relativeToCheckout(c.WorkDir); ok {
+			running[rel] = true
 		}
-		rel, err := filepath.Rel(a.deps.VulhubRoot, c.WorkDir)
-		if err != nil {
-			continue
-		}
-		running[filepath.ToSlash(rel)] = true
 	}
 	if len(running) == 0 {
 		return

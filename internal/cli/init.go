@@ -40,7 +40,7 @@ func (a *app) cmdInit(args []string) int {
 
 	// 克隆完成后立即分配编号：init 是一个"做准备"的动作，
 	// 用户预期它把事情都办妥，不该等到第一次 ls 才有编号可用。
-	s, err := a.load()
+	s, err := a.loadForInit()
 	if err != nil {
 		return a.fail(err)
 	}

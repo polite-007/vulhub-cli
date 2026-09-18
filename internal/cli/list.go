@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -19,13 +20,13 @@ type environmentJSON struct {
 
 // cmdLs 列出全部靶场。
 func (a *app) cmdLs(args []string) int {
-	jsonOut, rest, err := splitJSONFlag(args)
+	var jsonOut bool
+	rest, err := parseFlags(args, map[string]*bool{"--json": &jsonOut})
 	if err != nil {
 		return a.usageError(err)
 	}
 	if len(rest) > 0 {
-		a.printUsage(a.errOut)
-		return ExitUsage
+		return a.usageError(errors.New("ls 不接受位置参数"))
 	}
 
 	s, err := a.load()
@@ -37,13 +38,13 @@ func (a *app) cmdLs(args []string) int {
 
 // cmdSearch 按漏洞标题与靶场路径检索靶场。
 func (a *app) cmdSearch(args []string) int {
-	jsonOut, keywords, err := splitJSONFlag(args)
+	var jsonOut bool
+	keywords, err := parseFlags(args, map[string]*bool{"--json": &jsonOut})
 	if err != nil {
 		return a.usageError(err)
 	}
 	if len(keywords) == 0 {
-		fmt.Fprint(a.errOut, "用法：vulhub search <关键词>…\n")
-		return ExitUsage
+		return a.usageError(errors.New("用法：vulhub search <关键词>…"))
 	}
 
 	s, err := a.load()
@@ -120,27 +121,7 @@ func matchesAll(env catalog.Environment, keywords []string) bool {
 	return true
 }
 
-// splitJSONFlag 摘出 --json，返回其余参数。
-func splitJSONFlag(args []string) (bool, []string, error) {
-	jsonOut := false
-	rest := make([]string, 0, len(args))
-	for _, arg := range args {
-		switch arg {
-		case "--json":
-			jsonOut = true
-		case "--":
-			// 之后的都当普通参数
-			continue
-		default:
-			if strings.HasPrefix(arg, "-") && arg != "-" {
-				return false, nil, fmt.Errorf("未知选项 %s", arg)
-			}
-			rest = append(rest, arg)
-		}
-	}
-	return jsonOut, rest, nil
-}
-
+// splitJSONFlag 已由 parseFlags 取代。
 func writeJSON(w io.Writer, payload any) error {
 	raw, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {

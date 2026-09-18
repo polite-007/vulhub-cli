@@ -52,7 +52,9 @@ func TestUpPrintsAccessURLsWithHostIPAndPorts(t *testing.T) {
 	}}
 
 	r := h.run("up", "activemq/CVE-2023-46604").requireCode(t, 0)
-	r.requireOut(t, "http://10.0.0.5:8161")
+	r.requireOut(t, "10.0.0.5:8161")
+	// 不猜协议：靶场里既有 web 服务也有数据库，给 3306 标 http:// 是一句假话。
+	r.requireNoOut(t, "http://")
 }
 
 func TestUpPrintsEveryPublishedPortNotJustOne(t *testing.T) {
@@ -70,8 +72,8 @@ func TestUpPrintsEveryPublishedPortNotJustOne(t *testing.T) {
 	}
 
 	r := h.run("up", "joomla/CVE-2015-8562").requireCode(t, 0)
-	r.requireOut(t, "http://10.0.0.5:8080")
-	r.requireOut(t, "http://10.0.0.5:3306")
+	r.requireOut(t, "10.0.0.5:8080")
+	r.requireOut(t, "10.0.0.5:3306")
 }
 
 // 拿不到本机地址时退回占位符，而不是给出一个错的 IP。
@@ -85,7 +87,7 @@ func TestUpFallsBackToPlaceholderWhenHostIPIsUnavailable(t *testing.T) {
 	}}
 
 	r := h.run("up", "activemq/CVE-2023-46604").requireCode(t, 0)
-	r.requireOut(t, "http://your-ip:8161")
+	r.requireOut(t, "your-ip:8161")
 }
 
 func TestUpAcceptsCommaSeparatedEnvironments(t *testing.T) {
@@ -262,7 +264,8 @@ func TestDelAllReportsImageRemovalFailureWithoutFailing(t *testing.T) {
 	r.requireErr(t, "镜像未能删除")
 }
 
-// del 是唯一不可逆的操作，一次只能销毁一个靶场。
+// del 是唯一不可逆的操作，一次只能销毁一个靶场。多选必须当作用法错误挡在门外，
+// 而不是静默地只销毁第一个。
 func TestDelRejectsMultipleEnvironments(t *testing.T) {
 	h := newHarness(t)
 	h.seed(
@@ -270,7 +273,7 @@ func TestDelRejectsMultipleEnvironments(t *testing.T) {
 		"log4j/CVE-2021-44228=Log4j2 RCE",
 	)
 
-	h.run("del", "-y", "1,2").requireCode(t, 1)
+	h.run("del", "-y", "1,2").requireCode(t, 2)
 	if len(h.compose.downCalls) != 0 {
 		t.Fatalf("多选必须被拒绝：%v", h.compose.downCalls)
 	}
@@ -279,7 +282,43 @@ func TestDelRejectsMultipleEnvironments(t *testing.T) {
 func TestDelRejectsUnknownOption(t *testing.T) {
 	h := newHarness(t)
 	h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE")
-	h.run("del", "--force", "1").requireCode(t, 1)
+	h.run("del", "--force", "1").requireCode(t, 2)
+}
+
+func TestDelWithoutArgumentsIsUsageError(t *testing.T) {
+	h := newHarness(t)
+	h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE")
+	h.run("del").requireCode(t, 2)
+}
+
+// story 23 要求打印"容器和网络"。网络名由 compose 项目名决定，所以要把它说出来。
+func TestDelNamesTheComposeProjectAndItsNetwork(t *testing.T) {
+	h := newHarness(t)
+	h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE")
+	h.compose.containers = []compose.Container{{
+		Name:    "activemq-web-1",
+		Project: "activemq-cve-2023-46604",
+		WorkDir: h.dir("activemq/CVE-2023-46604"),
+	}}
+
+	r := h.run("del", "-y", "1").requireCode(t, 0)
+	r.requireOut(t, "activemq-cve-2023-46604")
+	r.requireOut(t, "网络")
+}
+
+// 无法确认在跑什么时不能继续：这是不可逆操作，
+// 打印"没有运行中的容器"而实际有东西在跑，比直接失败危险得多。
+func TestDelAbortsWhenItCannotDetermineWhatIsRunning(t *testing.T) {
+	h := newHarness(t)
+	h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE")
+	h.compose.containerErr = errors.New("Cannot connect to the Docker daemon")
+
+	r := h.run("del", "-y", "1").requireCode(t, 1)
+	r.requireErr(t, "无法确认")
+	r.requireNoOut(t, "没有运行中的容器")
+	if len(h.compose.downCalls) != 0 {
+		t.Fatalf("无法确认运行状态时不应销毁：%v", h.compose.downCalls)
+	}
 }
 
 func TestDelAnnouncesWhatWillBeRemoved(t *testing.T) {

@@ -25,7 +25,6 @@ const (
 
 // PortMapping 是一条端口映射。
 type PortMapping struct {
-	HostIP        string
 	HostPort      int
 	ContainerPort int
 	Protocol      string
@@ -33,7 +32,6 @@ type PortMapping struct {
 
 // Container 是一个由 compose 创建的容器。
 type Container struct {
-	ID      string
 	Name    string
 	Project string
 	Service string
@@ -125,13 +123,7 @@ func (r *DockerRunner) Images(ctx context.Context, dir string) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	var images []string
-	for _, line := range strings.Split(out, "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			images = append(images, line)
-		}
-	}
-	return images, nil
+	return splitLines(out), nil
 }
 
 // RemoveImages 删除镜像。
@@ -159,12 +151,7 @@ func (r *DockerRunner) Containers(ctx context.Context, workDir string) ([]Contai
 	if err != nil {
 		return nil, err
 	}
-	var ids []string
-	for _, line := range strings.Split(idsOut, "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			ids = append(ids, line)
-		}
-	}
+	ids := splitLines(idsOut)
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -176,9 +163,13 @@ func (r *DockerRunner) Containers(ctx context.Context, workDir string) ([]Contai
 	return parseInspect(inspectOut)
 }
 
+// portBinding 是 docker inspect 里的一条端口绑定。
+type portBinding struct {
+	HostPort string `json:"HostPort"`
+}
+
 // inspectResult 是 docker inspect 输出中我们用到的部分。
 type inspectResult struct {
-	ID    string `json:"Id"`
 	Name  string `json:"Name"`
 	State struct {
 		Status string `json:"Status"`
@@ -187,10 +178,7 @@ type inspectResult struct {
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
 	NetworkSettings struct {
-		Ports map[string][]struct {
-			HostIP   string `json:"HostIp"`
-			HostPort string `json:"HostPort"`
-		} `json:"Ports"`
+		Ports map[string][]portBinding `json:"Ports"`
 	} `json:"NetworkSettings"`
 }
 
@@ -202,26 +190,21 @@ func parseInspect(raw string) ([]Container, error) {
 
 	containers := make([]Container, 0, len(results))
 	for _, res := range results {
-		c := Container{
-			ID:      res.ID,
+		containers = append(containers, Container{
 			Name:    strings.TrimPrefix(res.Name, "/"),
 			Project: res.Config.Labels[LabelProject],
 			Service: res.Config.Labels[LabelService],
 			WorkDir: res.Config.Labels[LabelWorkDir],
 			State:   res.State.Status,
-		}
-		c.Ports = parsePorts(res.NetworkSettings.Ports)
-		containers = append(containers, c)
+			Ports:   parsePorts(res.NetworkSettings.Ports),
+		})
 	}
 	sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
 	return containers, nil
 }
 
 // parsePorts 把 inspect 的 Ports 映射（键形如 "80/tcp"）摊平成有序列表。
-func parsePorts(ports map[string][]struct {
-	HostIP   string `json:"HostIp"`
-	HostPort string `json:"HostPort"`
-}) []PortMapping {
+func parsePorts(ports map[string][]portBinding) []PortMapping {
 	var out []PortMapping
 	for key, bindings := range ports {
 		containerPort, protocol := splitPortKey(key)
@@ -231,7 +214,6 @@ func parsePorts(ports map[string][]struct {
 				continue // 未发布到宿主
 			}
 			out = append(out, PortMapping{
-				HostIP:        b.HostIP,
 				HostPort:      hostPort,
 				ContainerPort: containerPort,
 				Protocol:      protocol,
@@ -244,6 +226,17 @@ func parsePorts(ports map[string][]struct {
 		}
 		return out[i].ContainerPort < out[j].ContainerPort
 	})
+	return out
+}
+
+// splitLines 按行切分并丢掉空行，用于解析命令输出。
+func splitLines(s string) []string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			out = append(out, line)
+		}
+	}
 	return out
 }
 

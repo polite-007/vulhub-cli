@@ -111,18 +111,26 @@ func (a *app) absDir(path string) string {
 type state struct {
 	Environments []catalog.Environment
 	Index        *envindex.Index
+
+	byPath map[string]catalog.Environment
 }
 
 // load 读取靶场清单与索引，并为尚未分配编号的靶场补上编号。
 //
 // 补编号发生在解析之前，因此索引不存在时用编号操作也能正常工作——
 // 多敲一次命令的摩擦换不来任何安全性，编号是可重建的派生数据。
-func (a *app) load() (*state, error) {
+func (a *app) load() (*state, error) { return a.loadWith(true) }
+
+// loadForInit 与 load 相同，但不就索引重建发出警告：
+// init 刚克隆完，索引本就不存在，那时的提示纯属噪音。
+func (a *app) loadForInit() (*state, error) { return a.loadWith(false) }
+
+func (a *app) loadWith(warnOnRebuild bool) (*state, error) {
 	envs, err := catalog.Load(a.deps.VulhubRoot)
 	if err != nil {
 		return nil, err
 	}
-	idx, err := envindex.Load(a.deps.IndexPath)
+	idx, status, err := envindex.Load(a.deps.IndexPath)
 	if err != nil {
 		return nil, err
 	}
@@ -130,8 +138,29 @@ func (a *app) load() (*state, error) {
 		if err := idx.Save(a.deps.IndexPath); err != nil {
 			return nil, err
 		}
+		if warnOnRebuild {
+			a.warnIndexRebuild(status)
+		}
 	}
-	return &state{Environments: envs, Index: idx}, nil
+
+	byPath := make(map[string]catalog.Environment, len(envs))
+	for _, e := range envs {
+		byPath[e.Path] = e
+	}
+	return &state{Environments: envs, Index: idx, byPath: byPath}, nil
+}
+
+// warnIndexRebuild 在索引被重建时告知用户编号已重新分配。
+//
+// 这是编号方案固有的弱点：索引是唯一真相源，丢了编号就全乱。
+// 用户必须知道自己此前记住的编号不再有效，否则会安静地用错靶场。
+func (a *app) warnIndexRebuild(status envindex.Status) {
+	switch status {
+	case envindex.StatusCorrupt:
+		fmt.Fprintf(a.errOut, "警告：索引文件 %s 无法解析，已重新建立。编号已重新分配，此前记住的编号不再有效。\n", a.deps.IndexPath)
+	case envindex.StatusMissing:
+		fmt.Fprintf(a.errOut, "提示：未找到索引文件 %s，已新建并分配编号。\n", a.deps.IndexPath)
+	}
 }
 
 func paths(envs []catalog.Environment) []string {
@@ -149,18 +178,13 @@ func (s *state) resolve(arg string) (target, error) {
 		return target{}, errors.New("靶场参数为空")
 	}
 
-	byPath := make(map[string]catalog.Environment, len(s.Environments))
-	for _, e := range s.Environments {
-		byPath[e.Path] = e
-	}
-
 	// 纯数字视为编号。
 	if n, err := strconv.Atoi(arg); err == nil {
 		path, ok := s.Index.PathByNumber(n)
 		if !ok {
 			return target{}, fmt.Errorf("编号 %d 尚未分配", n)
 		}
-		env, ok := byPath[path]
+		env, ok := s.byPath[path]
 		if !ok {
 			return target{}, fmt.Errorf("编号 %d 对应的靶场 %s 已不在 vulhub 检出中，请运行 update", n, path)
 		}
@@ -168,7 +192,7 @@ func (s *state) resolve(arg string) (target, error) {
 	}
 
 	normalized := filepath.ToSlash(strings.TrimSuffix(arg, "/"))
-	env, ok := byPath[normalized]
+	env, ok := s.byPath[normalized]
 	if !ok {
 		return target{}, fmt.Errorf("找不到靶场 %s", arg)
 	}
@@ -189,16 +213,34 @@ func splitList(args []string) []string {
 	return out
 }
 
-// requireSingle 确认恰好给出了一个靶场参数。
-func requireSingle(command string, args []string) error {
-	switch len(args) {
-	case 0:
-		return fmt.Errorf("用法：vulhub %s <靶场>", command)
-	case 1:
-		return nil
-	default:
-		return fmt.Errorf("%s 一次只能操作一个靶场，请分开执行", command)
+// requireTarget 确认恰好给出了一个靶场参数。
+func requireTarget(args []string) error {
+	if len(args) == 0 {
+		return errors.New("没有给出靶场")
 	}
+	return nil
+}
+
+// parseFlags 摘出已知开关，返回其余的位置参数。
+//
+// "--" 之后的参数一律视为位置参数；未知的 -x 报错；单独的 "-" 按位置参数处理。
+func parseFlags(args []string, flags map[string]*bool) ([]string, error) {
+	var positional []string
+	for i, arg := range args {
+		if arg == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if target, ok := flags[arg]; ok {
+			*target = true
+			continue
+		}
+		if strings.HasPrefix(arg, "-") && arg != "-" {
+			return nil, fmt.Errorf("未知选项 %s", arg)
+		}
+		positional = append(positional, arg)
+	}
+	return positional, nil
 }
 
 // resolveAll 解析一串靶场参数，任一失败即整体失败。

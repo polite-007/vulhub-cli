@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -38,13 +39,13 @@ type runningGroup struct {
 
 // cmdStatus 显示当前运行中的靶场。
 func (a *app) cmdStatus(args []string) int {
-	jsonOut, rest, err := splitJSONFlag(args)
+	var jsonOut bool
+	rest, err := parseFlags(args, map[string]*bool{"--json": &jsonOut})
 	if err != nil {
 		return a.usageError(err)
 	}
 	if len(rest) > 0 {
-		a.printUsage(a.errOut)
-		return ExitUsage
+		return a.usageError(errors.New("status 不接受位置参数"))
 	}
 
 	containers, err := a.deps.Compose.Containers(a.ctx, "")
@@ -79,7 +80,7 @@ func (a *app) cmdStatus(args []string) int {
 
 	fmt.Fprintln(a.out, "运行中的靶场：")
 	for _, g := range groups {
-		number, name := a.describe(g.Path, s)
+		number, name := a.numberAndTitle(g.Path, s)
 		line := fmt.Sprintf("\n%4d  %s", number, g.Path)
 		if name != "" {
 			line += "  " + name
@@ -108,20 +109,40 @@ func (a *app) groupByEnvironment(containers []compose.Container) []runningGroup 
 	return groups
 }
 
-// pathForWorkDir 把容器标签里的工作目录还原成靶场路径。
-// 工作目录不在 vulhub 检出内时，原样返回它，免得容器凭空消失。
+// relativeToCheckout 把容器标签里的工作目录还原成靶场路径。
+//
+// 返回 false 表示这个工作目录根本不是靶场——它是这台机器上别人的 compose 项目。
+// 调用方必须据此把它排除在靶场语义之外，否则会把无关项目当成靶场处理。
+func (a *app) relativeToCheckout(workDir string) (string, bool) {
+	if workDir == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(a.deps.VulhubRoot, workDir)
+	if err != nil {
+		// 跨盘符等情况无法求相对路径，那必然在检出之外。
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+		return "", false
+	}
+	return rel, true
+}
+
+// pathForWorkDir 返回展示用的靶场路径。工作目录不在检出内时原样返回它，
+// 免得容器从 status 里凭空消失。
 func (a *app) pathForWorkDir(workDir string) string {
 	if workDir == "" {
 		return "(未知靶场)"
 	}
-	rel, err := filepath.Rel(a.deps.VulhubRoot, workDir)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return filepath.ToSlash(workDir)
+	if rel, ok := a.relativeToCheckout(workDir); ok {
+		return rel
 	}
-	return filepath.ToSlash(rel)
+	return filepath.ToSlash(workDir)
 }
 
-func (a *app) describe(path string, s *state) (int, string) {
+// numberAndTitle 返回某个靶场路径对应的编号与漏洞标题；清单里没有它时返回零值。
+func (a *app) numberAndTitle(path string, s *state) (int, string) {
 	for _, e := range s.Environments {
 		if e.Path == path {
 			if s.Index == nil {
@@ -135,7 +156,7 @@ func (a *app) describe(path string, s *state) (int, string) {
 }
 
 func (a *app) groupJSON(g runningGroup, s *state) statusJSON {
-	number, name := a.describe(g.Path, s)
+	number, name := a.numberAndTitle(g.Path, s)
 	out := statusJSON{Number: number, Path: g.Path, Name: name, Containers: []containerJSON{}}
 	for _, c := range g.Containers {
 		item := containerJSON{Name: c.Name, Service: c.Service, State: c.State, Ports: []portJSON{}}

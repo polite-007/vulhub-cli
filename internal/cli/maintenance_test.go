@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -181,9 +182,59 @@ func TestPullWithoutArgumentsIsUsageError(t *testing.T) {
 func TestPullRejectsAllCombinedWithTargets(t *testing.T) {
 	h := newHarness(t)
 	h.seed("a/one=One")
-	h.run("pull", "--all", "1").requireCode(t, 1)
+	h.run("pull", "--all", "1").requireCode(t, 2)
 	if len(h.compose.pullCalls) != 0 {
 		t.Fatalf("冲突的参数组合不应触发任何拉取：%v", h.compose.pullCalls)
+	}
+}
+
+// --- 索引重建 ---
+
+// 索引是唯一真相源，丢了编号就全乱。用户必须知道自己记住的编号不再有效。
+func TestCorruptIndexIsRebuiltWithAWarning(t *testing.T) {
+	h := newHarness(t)
+	h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE")
+	h.writeIndex(`{ this is not JSON`)
+
+	r := h.run("ls").requireCode(t, 0).requireOut(t, "activemq/CVE-2023-46604")
+	r.requireErr(t, "无法解析")
+	r.requireErr(t, "编号已重新分配")
+}
+
+func TestMissingIndexIsRebuiltWithANotice(t *testing.T) {
+	h := newHarness(t)
+	h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE")
+
+	h.run("ls").requireCode(t, 0).requireErr(t, "未找到索引文件")
+}
+
+// init 刚克隆完，索引本就不存在，那时的提示纯属噪音。
+func TestInitDoesNotWarnAboutTheIndexItJustCreated(t *testing.T) {
+	h := newHarness(t)
+	h.git.cloneFn = func(_, _ string) error {
+		h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE")
+		return nil
+	}
+
+	r := h.run("init").requireCode(t, 0)
+	if strings.Contains(r.err, "未找到索引文件") {
+		t.Fatalf("init 不该就新建索引发出提示：%s", r.err)
+	}
+}
+
+// 树外的 compose 项目不是靶场，不能被报成"受本次更新影响"。
+func TestUpdateIgnoresProjectsOutsideTheCheckout(t *testing.T) {
+	h := newHarness(t)
+	h.seed("a/one=One")
+	h.run("ls").requireCode(t, 0)
+
+	h.compose.containers = []compose.Container{
+		{Name: "unrelated-1", WorkDir: filepath.Join(string(filepath.Separator), "srv", "unrelated")},
+	}
+
+	r := h.run("update").requireCode(t, 0)
+	if strings.Contains(r.out, "受本次更新影响") {
+		t.Fatalf("树外的项目不该被报成受影响的靶场：\n%s", r.out)
 	}
 }
 

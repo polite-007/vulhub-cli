@@ -2,17 +2,24 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
+
+	"github.com/polite-007/vulhub-cli/internal/compose"
 )
 
 // cmdUp 启动一个或多个靶场。
 func (a *app) cmdUp(args []string) int {
-	if len(args) == 0 {
-		fmt.Fprint(a.errOut, "用法：vulhub up <靶场>[,…]\n")
-		return ExitUsage
+	positional, err := parseFlags(args, nil)
+	if err != nil {
+		return a.usageError(err)
 	}
-	targets, err := a.resolveAll(args)
+	if err := requireTarget(positional); err != nil {
+		return a.usageError(errors.New("用法：vulhub up <靶场>[,…]"))
+	}
+	targets, err := a.resolveAll(positional)
 	if err != nil {
 		return a.fail(err)
 	}
@@ -35,6 +42,9 @@ func (a *app) cmdUp(args []string) int {
 //
 // 多端口环境里替用户挑一个"主端口"是在猜，猜错了他还得自己去查，
 // 所以全部打印出来，多两行而已。
+//
+// 输出不带协议前缀：靶场里既有 web 服务也有数据库，给 3306 标上 http://
+// 是一句假话，而 主机:端口 本身已经足够可用。
 func (a *app) printAccessURLs(t target) {
 	containers, err := a.deps.Compose.Containers(a.ctx, a.absDir(t.Path))
 	if err != nil {
@@ -51,7 +61,7 @@ func (a *app) printAccessURLs(t target) {
 	var lines []string
 	for _, c := range containers {
 		for _, p := range c.Ports {
-			lines = append(lines, fmt.Sprintf("  http://%s:%d  (%s 服务，容器端口 %d/%s)",
+			lines = append(lines, fmt.Sprintf("  %s:%d  (%s 服务，容器端口 %d/%s)",
 				host, p.HostPort, c.Service, p.ContainerPort, p.Protocol))
 		}
 	}
@@ -66,11 +76,14 @@ func (a *app) printAccessURLs(t target) {
 
 // cmdStop 停止一个或多个靶场，容器与网络保留。
 func (a *app) cmdStop(args []string) int {
-	if len(args) == 0 {
-		fmt.Fprint(a.errOut, "用法：vulhub stop <靶场>[,…]\n")
-		return ExitUsage
+	positional, err := parseFlags(args, nil)
+	if err != nil {
+		return a.usageError(err)
 	}
-	targets, err := a.resolveAll(args)
+	if err := requireTarget(positional); err != nil {
+		return a.usageError(errors.New("用法：vulhub stop <靶场>[,…]"))
+	}
+	targets, err := a.resolveAll(positional)
 	if err != nil {
 		return a.fail(err)
 	}
@@ -91,35 +104,46 @@ func (a *app) cmdStop(args []string) int {
 //
 // 它是唯一不可逆的操作，因此不接受多选，且在动手前要求二次确认。
 func (a *app) cmdDel(args []string) int {
-	removeAll, assumeYes, positional, err := parseDelArgs(args)
+	var removeAll, assumeYes bool
+	positional, err := parseFlags(args, map[string]*bool{
+		"-a": &removeAll, "--all": &removeAll,
+		"-y": &assumeYes, "--yes": &assumeYes,
+	})
 	if err != nil {
-		return a.fail(err)
+		return a.usageError(err)
 	}
-	if err := requireSingle("del", positional); err != nil {
-		return a.fail(err)
+	if len(positional) != 1 {
+		return a.usageError(errors.New("用法：vulhub del <靶场> [-a] [-y]"))
 	}
 
 	targets, err := a.resolveAll(positional)
 	if err != nil {
 		return a.fail(err)
 	}
-	// 逗号列表在 requireSingle 那里还是单个参数（"1,2"），必须在这里再拦一次：
+	// 逗号列表在参数校验那里仍是一个参数（"1,2"），必须在这里再拦一次：
 	// 否则 del 会静默地只销毁第一个、把其余的丢掉。
 	if len(targets) != 1 {
-		return a.errorf("del 一次只能销毁一个靶场，请分开执行")
+		return a.usageError(errors.New("del 一次只能销毁一个靶场，请分开执行"))
 	}
 	t := targets[0]
 
+	// 无法确认该靶场在跑什么时不要继续。这是不可逆操作，
+	// 打印"没有运行中的容器"而实际有东西在跑，比直接失败危险得多。
+	containers, err := a.deps.Compose.Containers(a.ctx, a.absDir(t.Path))
+	if err != nil {
+		return a.errorf("无法确认该靶场的运行状态，已中止：%v", err)
+	}
+
 	// 即便确认被跳过（-y），也先把将要发生的事说清楚。
-	containers, _ := a.deps.Compose.Containers(a.ctx, a.absDir(t.Path))
 	fmt.Fprintf(a.out, "将要销毁：\n  编号 %d  靶场 %s\n", t.Number, t.Path)
+	fmt.Fprintf(a.out, "  compose 项目：%s（其网络会一并删除）\n", a.projectName(t, containers))
 	if len(containers) > 0 {
-		fmt.Fprintln(a.out, "  容器与网络：")
+		fmt.Fprintln(a.out, "  容器：")
 		for _, c := range containers {
 			fmt.Fprintf(a.out, "    %s\n", c.Name)
 		}
 	} else {
-		fmt.Fprintln(a.out, "  容器与网络：（当前没有运行中的容器）")
+		fmt.Fprintln(a.out, "  容器：（当前没有运行中的容器）")
 	}
 	if removeAll {
 		fmt.Fprintln(a.out, "  volume：该靶场的全部数据卷")
@@ -157,21 +181,17 @@ func (a *app) cmdDel(args []string) int {
 	return ExitOK
 }
 
-func parseDelArgs(args []string) (removeAll, assumeYes bool, positional []string, err error) {
-	for _, arg := range args {
-		switch arg {
-		case "-a", "--all":
-			removeAll = true
-		case "-y", "--yes":
-			assumeYes = true
-		default:
-			if strings.HasPrefix(arg, "-") && arg != "-" {
-				return false, false, nil, fmt.Errorf("del 不支持选项 %s", arg)
-			}
-			positional = append(positional, arg)
+// projectName 返回靶场对应的 compose 项目名。
+//
+// 优先取容器标签上的真实项目名；没有容器可查时退回目录名——
+// compose 在靶场目录里执行时就是用目录名作项目名的。
+func (a *app) projectName(t target, containers []compose.Container) string {
+	for _, c := range containers {
+		if c.Project != "" {
+			return c.Project
 		}
 	}
-	return removeAll, assumeYes, positional, nil
+	return filepath.Base(a.absDir(t.Path))
 }
 
 // confirm 在 out 上提示并读取一行输入，只有明确的肯定才算确认。

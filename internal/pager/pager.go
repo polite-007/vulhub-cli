@@ -49,13 +49,26 @@ func (p *Pager) Println(line string) error {
 }
 
 // waitForEnter 逐字节读到换行。逐字节是为了不在调用方的输入流上再套一层缓冲，
-// 那会吞掉后续读取需要的字节。返回 false 表示输入已耗尽。
+// 那会吞掉后续读取需要的字节。返回 false 表示输入已耗尽或无法继续等待。
 func waitForEnter(in io.Reader) bool {
+	// 一个反复返回 (0, nil) 的 Reader 会让这个循环空转。
+	// io.Reader 的约定不鼓励这么做，但循环本身需要有防线。
+	const maxEmptyReads = 1000
+
 	var buf [1]byte
+	emptyReads := 0
 	for {
 		n, err := in.Read(buf[:])
-		if n > 0 && buf[0] == '\n' {
-			return true
+		if n > 0 {
+			emptyReads = 0
+			if buf[0] == '\n' {
+				return true
+			}
+		} else if err == nil {
+			emptyReads++
+			if emptyReads >= maxEmptyReads {
+				return false
+			}
 		}
 		if err != nil {
 			return n > 0

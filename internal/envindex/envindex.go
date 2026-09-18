@@ -18,24 +18,44 @@ type Index struct {
 	Numbers map[string]int `json:"numbers"`
 }
 
-// Load 读取索引文件。文件不存在时返回一个空索引而不是错误——首次运行属于正常情况。
-func Load(path string) (*Index, error) {
+// Status 描述一次索引读取的结果。
+type Status int
+
+const (
+	// StatusOK 表示索引文件存在且可解析。
+	StatusOK Status = iota
+	// StatusMissing 表示索引文件不存在，返回的是空索引。
+	StatusMissing
+	// StatusCorrupt 表示索引文件存在但无法解析。返回的是空索引，
+	// 调用方应当重建它，并告知用户编号已被重新分配。
+	StatusCorrupt
+)
+
+// Load 读取索引文件。
+//
+// 文件不存在或无法解析时返回空索引而不是错误：这两种情况都意味着"重建"，
+// 而不是"失败"。调用方通过 Status 判断是否需要向用户发出警告。
+func Load(path string) (*Index, Status, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return &Index{Numbers: map[string]int{}}, nil
+			return empty(), StatusMissing, nil
 		}
-		return nil, fmt.Errorf("读取索引 %s: %w", path, err)
+		return nil, StatusOK, fmt.Errorf("读取索引 %s: %w", path, err)
 	}
 
 	var idx Index
 	if err := json.Unmarshal(raw, &idx); err != nil {
-		return nil, fmt.Errorf("解析索引 %s: %w", path, err)
+		return empty(), StatusCorrupt, nil
 	}
 	if idx.Numbers == nil {
 		idx.Numbers = map[string]int{}
 	}
-	return &idx, nil
+	return &idx, StatusOK, nil
+}
+
+func empty() *Index {
+	return &Index{Numbers: map[string]int{}}
 }
 
 // Save 写入索引文件，必要时创建其所在目录。
