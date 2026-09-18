@@ -1,9 +1,11 @@
 package cli_test
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunWithoutArgumentsShowsUsage(t *testing.T) {
@@ -186,6 +188,39 @@ func TestPagerKeepsGoingWhenInputIsExhausted(t *testing.T) {
 	r := h.runInput(strings.NewReader(""), true, "ls").requireCode(t, 0)
 	if lines := strings.Count(strings.TrimSpace(r.out), "\n") + 1; lines != 25 {
 		t.Fatalf("输入耗尽时仍应输出全部 25 行，实际 %d 行\n%s", lines, r.out)
+	}
+}
+
+// 回归测试：分页时按下 Ctrl+C 必须能退出。
+//
+// 缺陷的由来：main 用 signal.NotifyContext 拦截了 SIGINT，进程不再因 Ctrl+C
+// 而死，改为取消一个 context；而分页阻塞在 Read 上，没有任何人监听那个
+// context，于是进程永远卡住，Ctrl+C 也救不回来。
+func TestLsExitsOnInterruptWhilePaging(t *testing.T) {
+	h := newHarness(t)
+	h.seed(seedMany(25)...)
+
+	in := newBlockingReader()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan result, 1)
+	go func() { done <- h.runInputCtx(ctx, in, true, "ls") }()
+
+	select {
+	case <-in.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("分页没有开始等待输入")
+	}
+
+	cancel()
+
+	select {
+	case r := <-done:
+		// 130 = 128 + SIGINT，shell 惯例。
+		r.requireCode(t, 130)
+	case <-time.After(5 * time.Second):
+		t.Fatal("取消之后 ls 仍未退出——这正是 Ctrl+C 无效的那个缺陷")
 	}
 }
 

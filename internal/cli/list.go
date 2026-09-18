@@ -82,7 +82,7 @@ func (a *app) printEnvironments(s *state, envs []catalog.Environment, jsonOut bo
 		return ExitOK
 	}
 
-	p := pager.New(a.out, a.in, a.isTTY)
+	p := pager.New(a.ctx, a.out, a.in, a.isTTY)
 	width := 0
 	for _, env := range envs {
 		if len(env.Path) > width {
@@ -92,6 +92,9 @@ func (a *app) printEnvironments(s *state, envs []catalog.Environment, jsonOut bo
 	for _, env := range envs {
 		number, _ := s.Index.Number(env.Path)
 		if err := p.Println(formatEnvironment(number, env.Path, env.Name, width)); err != nil {
+			if errors.Is(err, pager.ErrInterrupted) {
+				return ExitInterrupted
+			}
 			return a.fail(err)
 		}
 	}

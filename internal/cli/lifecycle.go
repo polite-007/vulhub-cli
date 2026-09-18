@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -155,9 +156,17 @@ func (a *app) cmdDel(args []string) int {
 		}
 	}
 
-	if !assumeYes && !a.confirm("确认销毁？输入 y 继续：") {
-		fmt.Fprintln(a.out, "已取消")
-		return ExitOK
+	if !assumeYes {
+		confirmed, err := a.confirm("确认销毁？输入 y 继续：")
+		if err != nil {
+			// 确认过程被 Ctrl+C 打断：按未确认处理，绝不继续销毁。
+			fmt.Fprintln(a.out, "已取消")
+			return ExitInterrupted
+		}
+		if !confirmed {
+			fmt.Fprintln(a.out, "已取消")
+			return ExitOK
+		}
 	}
 
 	var images []string
@@ -195,15 +204,43 @@ func (a *app) projectName(t target, containers []compose.Container) string {
 }
 
 // confirm 在 out 上提示并读取一行输入，只有明确的肯定才算确认。
-func (a *app) confirm(prompt string) bool {
+// 返回错误表示确认过程被 ctx 取消。
+func (a *app) confirm(prompt string) (bool, error) {
 	fmt.Fprint(a.out, prompt)
-	reader := a.reader()
-	line, err := reader.ReadString('\n')
-	if err != nil && line == "" {
-		return false
+	line, err := a.readLine()
+	if err != nil {
+		return false, err
 	}
 	answer := strings.ToLower(strings.TrimSpace(line))
-	return answer == "y" || answer == "yes"
+	return answer == "y" || answer == "yes", nil
+}
+
+// readLine 读一行输入，可被 ctx 取消。
+//
+// 底层的 ReadString 无法中断，所以把它放进 goroutine，由本函数在 ctx 取消时
+// 放行——否则 Ctrl+C 会一直卡在这个读上，什么也退不出来。
+func (a *app) readLine() (string, error) {
+	type result struct {
+		line string
+		err  error
+	}
+	done := make(chan result, 1)
+	reader := a.reader()
+	go func() {
+		line, err := reader.ReadString('\n')
+		done <- result{line: line, err: err}
+	}()
+
+	select {
+	case r := <-done:
+		if r.err != nil && !errors.Is(r.err, io.EOF) {
+			return "", r.err
+		}
+		// 输入结束等同于没有回答，交由调用方按"未确认"处理。
+		return r.line, nil
+	case <-a.ctx.Done():
+		return "", a.ctx.Err()
+	}
 }
 
 // reader 在输入流上建立唯一的缓冲读取器，避免多处缓冲互相吞字节。

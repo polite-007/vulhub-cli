@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/polite-007/vulhub-cli/internal/cli"
@@ -243,10 +244,32 @@ func (h *harness) runWith(stdin string, isTTY bool, args ...string) result {
 }
 
 func (h *harness) runInput(in io.Reader, isTTY bool, args ...string) result {
+	return h.runInputCtx(context.Background(), in, isTTY, args...)
+}
+
+func (h *harness) runInputCtx(ctx context.Context, in io.Reader, isTTY bool, args ...string) result {
 	h.t.Helper()
 	var out, errOut bytes.Buffer
-	code := cli.Run(context.Background(), args, in, &out, &errOut, isTTY, h.deps())
+	code := cli.Run(ctx, args, in, &out, &errOut, isTTY, h.deps())
 	return result{code: code, out: out.String(), err: errOut.String()}
+}
+
+// blockingReader 的 Read 永不返回，用来模拟"用户盯着提示不按键"。
+//
+// 它是 Ctrl+C 那个缺陷的回归测试所必需的：只有读真的阻塞了，
+// "取消之后能否退出"才成为一个有意义的问题。
+type blockingReader struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func newBlockingReader() *blockingReader {
+	return &blockingReader{started: make(chan struct{})}
+}
+
+func (r *blockingReader) Read([]byte) (int, error) {
+	r.once.Do(func() { close(r.started) })
+	select {}
 }
 
 func (h *harness) deps() cli.Deps {

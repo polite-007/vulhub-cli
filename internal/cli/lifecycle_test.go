@@ -1,10 +1,12 @@
 package cli_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/polite-007/vulhub-cli/internal/compose"
 )
@@ -198,6 +200,38 @@ func TestDelProceedsWhenConfirmed(t *testing.T) {
 	}
 	if h.compose.downCalls[0].RemoveVolumes {
 		t.Fatal("默认不应删除 volume")
+	}
+}
+
+// 同一类缺陷的另一处：del 的确认提示也是阻塞读。Ctrl+C 同样必须能退出，
+// 而且绝不能因为被打断就把不可逆的销毁继续做下去。
+func TestDelExitsOnInterruptAtTheConfirmationPrompt(t *testing.T) {
+	h := newHarness(t)
+	h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE")
+
+	in := newBlockingReader()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan result, 1)
+	go func() { done <- h.runInputCtx(ctx, in, false, "del", "1") }()
+
+	select {
+	case <-in.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("del 没有进入确认提示")
+	}
+
+	cancel()
+
+	select {
+	case r := <-done:
+		r.requireCode(t, 130)
+	case <-time.After(5 * time.Second):
+		t.Fatal("取消之后 del 仍未退出")
+	}
+	if len(h.compose.downCalls) != 0 {
+		t.Fatalf("被打断的确认绝不能继续销毁：%v", h.compose.downCalls)
 	}
 }
 

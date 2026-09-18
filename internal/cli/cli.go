@@ -25,6 +25,8 @@ const (
 	ExitOK    = 0
 	ExitError = 1
 	ExitUsage = 2
+	// ExitInterrupted 是 Ctrl+C 打断时的退出码，遵循 shell 惯例（128 + SIGINT）。
+	ExitInterrupted = 130
 )
 
 // cloneDepth 是 init 的浅克隆深度：体积接近 tarball，同时保留 git 元信息，
@@ -55,33 +57,42 @@ func Run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer
 	}
 
 	command, rest := args[0], args[1:]
+
+	var code int
 	switch command {
 	case "init":
-		return a.cmdInit(rest)
+		code = a.cmdInit(rest)
 	case "ls":
-		return a.cmdLs(rest)
+		code = a.cmdLs(rest)
 	case "search":
-		return a.cmdSearch(rest)
+		code = a.cmdSearch(rest)
 	case "up":
-		return a.cmdUp(rest)
+		code = a.cmdUp(rest)
 	case "stop":
-		return a.cmdStop(rest)
+		code = a.cmdStop(rest)
 	case "del":
-		return a.cmdDel(rest)
+		code = a.cmdDel(rest)
 	case "status":
-		return a.cmdStatus(rest)
+		code = a.cmdStatus(rest)
 	case "pull":
-		return a.cmdPull(rest)
+		code = a.cmdPull(rest)
 	case "update":
-		return a.cmdUpdate(rest)
+		code = a.cmdUpdate(rest)
 	case "help", "-h", "--help":
 		a.printUsage(out)
-		return ExitOK
+		code = ExitOK
 	default:
 		fmt.Fprintf(errOut, "未知命令 %q\n\n", command)
 		a.printUsage(errOut)
-		return ExitUsage
+		code = ExitUsage
 	}
+
+	if ctx.Err() != nil {
+		// Ctrl+C 打断。命令自己的错误码此时多半只是打断的副产物，
+		// 统一按 shell 惯例返回 130。
+		return ExitInterrupted
+	}
+	return code
 }
 
 // app 持有一轮命令执行的上下文。
