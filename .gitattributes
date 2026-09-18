@@ -1,0 +1,2 @@
+# 目标平台是 linux-amd64，统一用 LF，避免在 Windows 上开发时把 CRLF 提交进去。
+* text=auto eol=lf

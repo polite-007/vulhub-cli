@@ -1,0 +1,8 @@
+# 构建产物
+/vulhub
+/vulhub-cli
+/vulhub-cli.exe
+
+# 测试与覆盖率
+*.out
+coverage.html
