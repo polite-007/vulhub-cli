@@ -78,7 +78,7 @@ vulhub del 68            # destroy it, keeping the volumes
 
 Comma-separated lists are accepted by `pull`, `up` and `stop`. `del` is the only irreversible operation and accepts exactly one environment.
 
-`-time` sorts `ls` and `search` by creation time, newest first. It changes only what you see — **never the numbers**, which are assigned once in path order and stay put. Environments with no known creation time (all of vulhub, since its registry carries no dates) sort last.
+`-time` sorts `ls` and `search` by creation time, newest first. It changes only what you see — **never the numbers**, which are assigned once and stay put. Environments with no known creation time (all of vulhub, since its registry carries no dates) sort last. Without `-time`, output is ordered by number.
 
 Options for `del`:
 

@@ -2,6 +2,8 @@ package cli_test
 
 import (
 	"encoding/json"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -323,6 +325,51 @@ func TestGenVulfocusRequiresAValueForEachOption(t *testing.T) {
 	for _, arg := range []string{"-o", "--output", "--username", "--token"} {
 		h.run("gen-vulfocus", arg).requireCode(t, 2).requireErr(t, "需要一个参数")
 	}
+}
+
+// 升级路径：已经用 v0.1.x 分配过编号的机器，装上带 vulfocus 的版本之后，
+// vulfocus 靶场的编号是**追加**的（既有编号按设计不变）。
+//
+// 这时如果 `ls` 还按路径显示，编号就会在列表里乱跳——因为 vulfocus 的路径
+// 会插进 vulhub 的路径中间，但它拿的是最大的那批编号。
+func TestLsKeepsNumbersAscendingAfterUpgrade(t *testing.T) {
+	h := newHarness(t)
+	// 模拟旧版本：只有 vulhub，编号 1、2。
+	h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE", "zabbix/CVE-2022-23131=Zabbix RCE")
+	h.run("ls").requireCode(t, 0)
+
+	// 装上带 vulfocus 的版本：它的数量最多，编号被追加在最后。
+	h.seedVulfocus(
+		"drupal-cve_2018_7600=80",
+		"redis-cve_2022_0543=6379",
+		"weblogic-cve_2019_2725=7001",
+	)
+
+	r := h.run("ls").requireCode(t, 0)
+
+	numbers := numbersInDisplayOrder(t, r.out)
+	if !sort.IntsAreSorted(numbers) {
+		t.Fatalf("升级后 ls 的编号不再递增（vulfocus 的路径插进了 vulhub 中间，"+
+			"但拿的是最大的编号）：\n%s", r.out)
+	}
+}
+
+// numbersInDisplayOrder 按 ls 的输出顺序取出编号。
+func numbersInDisplayOrder(t *testing.T, out string) []int {
+	t.Helper()
+	var numbers []int
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		n, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		numbers = append(numbers, n)
+	}
+	return numbers
 }
 
 func TestStatusGroupsVulfocusEnvironmentLikeAnyOther(t *testing.T) {

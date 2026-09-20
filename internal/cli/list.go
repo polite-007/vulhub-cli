@@ -81,6 +81,8 @@ func (a *app) cmdSearch(args []string) int {
 func (a *app) printEnvironments(s *state, envs []catalog.Environment, jsonOut, byTime bool) int {
 	if byTime {
 		envs = sortedByTimeDesc(envs)
+	} else {
+		envs = sortedByNumber(s, envs)
 	}
 
 	if jsonOut {
@@ -135,6 +137,24 @@ func matchesAll(env catalog.Environment, keywords []string) bool {
 		}
 	}
 	return true
+}
+
+// sortedByNumber 按编号升序排一份副本。
+//
+// **显示按编号而不是按路径。**编号是按其引入时的路径顺序一次性分配的，
+// 所以新装的机器上两者结果完全一致；但从旧版本升级上来的机器不同——
+// 新来源的编号是**追加**的（既有编号按设计不变），而它的路径会插进原有
+// 路径中间，按路径显示就会让编号在列表里乱跳（1、3、4、5、2）。
+func sortedByNumber(s *state, envs []catalog.Environment) []catalog.Environment {
+	out := append([]catalog.Environment(nil), envs...)
+	number := func(path string) int {
+		n, _ := s.Index.Number(path)
+		return n
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return number(out[i].Path) < number(out[j].Path)
+	})
+	return out
 }
 
 // sortedByTimeDesc 按创建时间倒序排一份副本，新的在前。
