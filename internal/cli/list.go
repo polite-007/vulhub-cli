@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/polite-007/vulhub-cli/internal/catalog"
@@ -20,8 +21,12 @@ type environmentJSON struct {
 
 // cmdLs 列出全部靶场。
 func (a *app) cmdLs(args []string) int {
-	var jsonOut bool
-	rest, err := parseFlags(args, map[string]*bool{"--json": &jsonOut})
+	var jsonOut, byTime bool
+	rest, err := parseFlags(args, map[string]*bool{
+		"--json": &jsonOut,
+		"-time":  &byTime,
+		"--time": &byTime,
+	})
 	if err != nil {
 		return a.usageError(err)
 	}
@@ -33,13 +38,17 @@ func (a *app) cmdLs(args []string) int {
 	if err != nil {
 		return a.fail(err)
 	}
-	return a.printEnvironments(s, s.Environments, jsonOut)
+	return a.printEnvironments(s, s.Environments, jsonOut, byTime)
 }
 
 // cmdSearch 按漏洞标题与靶场路径检索靶场。
 func (a *app) cmdSearch(args []string) int {
-	var jsonOut bool
-	keywords, err := parseFlags(args, map[string]*bool{"--json": &jsonOut})
+	var jsonOut, byTime bool
+	keywords, err := parseFlags(args, map[string]*bool{
+		"--json": &jsonOut,
+		"-time":  &byTime,
+		"--time": &byTime,
+	})
 	if err != nil {
 		return a.usageError(err)
 	}
@@ -59,7 +68,7 @@ func (a *app) cmdSearch(args []string) int {
 		}
 	}
 
-	if code := a.printEnvironments(s, matches, jsonOut); code != ExitOK {
+	if code := a.printEnvironments(s, matches, jsonOut, byTime); code != ExitOK {
 		return code
 	}
 	if len(matches) == 0 {
@@ -69,7 +78,11 @@ func (a *app) cmdSearch(args []string) int {
 	return ExitOK
 }
 
-func (a *app) printEnvironments(s *state, envs []catalog.Environment, jsonOut bool) int {
+func (a *app) printEnvironments(s *state, envs []catalog.Environment, jsonOut, byTime bool) int {
+	if byTime {
+		envs = sortedByTimeDesc(envs)
+	}
+
 	if jsonOut {
 		payload := make([]environmentJSON, 0, len(envs))
 		for _, env := range envs {
@@ -122,6 +135,33 @@ func matchesAll(env catalog.Environment, keywords []string) bool {
 		}
 	}
 	return true
+}
+
+// sortedByTimeDesc 按创建时间倒序排一份副本，新的在前。
+//
+// 它只影响显示，不影响编号——编号按路径字典序一次性分配、此后不变，
+// 这是"记住 68 号"这件事能成立的前提。
+//
+// **没有创建时间的靶场排在最后**（vulhub 来源全都没有：environments.toml
+// 里没有任何日期字段），同一时间点内按路径排序以保证结果稳定。
+func sortedByTimeDesc(envs []catalog.Environment) []catalog.Environment {
+	out := append([]catalog.Environment(nil), envs...)
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i].CreatedAt, out[j].CreatedAt
+		switch {
+		case a.IsZero() && b.IsZero():
+			return out[i].Path < out[j].Path
+		case a.IsZero():
+			return false
+		case b.IsZero():
+			return true
+		case !a.Equal(b):
+			return a.After(b)
+		default:
+			return out[i].Path < out[j].Path
+		}
+	})
+	return out
 }
 
 // splitJSONFlag 已由 parseFlags 取代。

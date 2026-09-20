@@ -37,7 +37,10 @@ func main() {
 		// 索引必须放在 vulhub 检出之外：检出是 git 仓库，
 		// 索引写进去会产生未跟踪文件，使 update 的 git pull 面对脏工作区。
 		IndexPath: filepath.Join(home, ".local", "share", "vulhub-cli", "index.json"),
-		RepoURL:   defaultRepoURL,
+		// vulfocus 来源的靶场没有目录，它们的 compose 文件由本工具合成到这里。
+		// 同样不能写进 ~/vulhub。
+		VulfocusRoot: filepath.Join(home, ".local", "share", "vulhub-cli", "vulfocus"),
+		RepoURL:      defaultRepoURL,
 	}
 
 	os.Exit(cli.Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, isTerminal(os.Stdout), deps))

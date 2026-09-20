@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -28,6 +29,11 @@ type Environment struct {
 	Path string
 	// Name 是漏洞标题。降级扫描目录树时为空。
 	Name string
+	// CreatedAt 是该靶场的创建时间，用于 ls -time。
+	//
+	// **vulhub 来源没有这个信息**：environments.toml 里没有任何日期字段，
+	// 因此这里的值恒为零值，按时间排序时这类靶场排在最后。
+	CreatedAt time.Time
 }
 
 // Load 返回 vulhub 检出根目录下的全部靶场，按靶场路径字典序排列。

@@ -4,6 +4,10 @@
 /vulhub-cli.exe
 /dist/
 
+# 临时构建与调试输出
+*.tmp.exe
+/gen.log
+
 # 测试与覆盖率
 *.out
 coverage.html

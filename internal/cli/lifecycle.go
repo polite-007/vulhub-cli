@@ -29,9 +29,13 @@ func (a *app) cmdUp(args []string) int {
 	}
 
 	for _, t := range targets {
+		dir, err := a.ensureEnvironment(t.Path)
+		if err != nil {
+			return a.fail(err)
+		}
 		fmt.Fprintf(a.out, "正在启动 %d  %s\n", t.Number, t.Path)
 		// 不做端口冲突预检：冲突由 Docker 自己报错。
-		if err := a.deps.Compose.Up(a.ctx, a.absDir(t.Path)); err != nil {
+		if err := a.deps.Compose.Up(a.ctx, dir); err != nil {
 			return a.fail(err)
 		}
 		a.printAccessURLs(t)
@@ -93,7 +97,11 @@ func (a *app) cmdStop(args []string) int {
 	}
 
 	for _, t := range targets {
-		if err := a.deps.Compose.Stop(a.ctx, a.absDir(t.Path)); err != nil {
+		dir, err := a.ensureEnvironment(t.Path)
+		if err != nil {
+			return a.fail(err)
+		}
+		if err := a.deps.Compose.Stop(a.ctx, dir); err != nil {
 			return a.fail(err)
 		}
 		fmt.Fprintf(a.out, "已停止 %d  %s\n", t.Number, t.Path)
@@ -128,9 +136,15 @@ func (a *app) cmdDel(args []string) int {
 	}
 	t := targets[0]
 
+	// vulfocus 来源的靶场没有目录，compose 文件在这里合成；后面的操作都基于它。
+	dir, err := a.ensureEnvironment(t.Path)
+	if err != nil {
+		return a.fail(err)
+	}
+
 	// 无法确认该靶场在跑什么时不要继续。这是不可逆操作，
 	// 打印"没有运行中的容器"而实际有东西在跑，比直接失败危险得多。
-	containers, err := a.deps.Compose.Containers(a.ctx, a.absDir(t.Path))
+	containers, err := a.deps.Compose.Containers(a.ctx, dir)
 	if err != nil {
 		return a.errorf("无法确认该靶场的运行状态，已中止：%v", err)
 	}
@@ -148,7 +162,7 @@ func (a *app) cmdDel(args []string) int {
 	}
 	if removeAll {
 		fmt.Fprintln(a.out, "  volume：该靶场的全部数据卷")
-		if images, err := a.deps.Compose.Images(a.ctx, a.absDir(t.Path)); err == nil && len(images) > 0 {
+		if images, err := a.deps.Compose.Images(a.ctx, dir); err == nil && len(images) > 0 {
 			fmt.Fprintln(a.out, "  镜像：")
 			for _, img := range images {
 				fmt.Fprintf(a.out, "    %s\n", img)
@@ -174,10 +188,10 @@ func (a *app) cmdDel(args []string) int {
 		// 只删该靶场引用的镜像，不做共享检查，也不做全局 prune：
 		// 镜像被其他靶场共用时删掉的后果只是下次要重新拉取，不构成数据损失；
 		// 而 prune 会波及 vulhub 之外属于用户自己的镜像。
-		images, _ = a.deps.Compose.Images(a.ctx, a.absDir(t.Path))
+		images, _ = a.deps.Compose.Images(a.ctx, dir)
 	}
 
-	if err := a.deps.Compose.Down(a.ctx, a.absDir(t.Path), removeAll); err != nil {
+	if err := a.deps.Compose.Down(a.ctx, dir, removeAll); err != nil {
 		return a.fail(err)
 	}
 	if len(images) > 0 {

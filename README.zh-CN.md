@@ -16,6 +16,13 @@ vulhub-cli 在本地维护一份 vulhub 检出，并提供命令来列出、检�
 
 靶场可以用它的**路径**（`activemq/CVE-2023-46604`）或一个简短的**编号**（`68`）来指代。编号一经分配便不再改变，因此可以放心记住、写进脚本，也可以口头传达给同事。
 
+靶场有**两个来源**，由路径前缀区分：
+
+- `activemq/CVE-2023-46604` —— 来自 [vulhub](https://github.com/vulhub/vulhub) 仓库
+- `vulfocus/drupal-cve_2018_7600` —— 来自 Docker Hub 的 [`vulfocus`](https://hub.docker.com/u/vulfocus) 命名空间
+
+两者共用一套编号，所以 `68` 指的是什么与来源无关。
+
 ## 环境要求
 
 - **Linux, amd64。** 当前不支持其他平台。
@@ -23,6 +30,8 @@ vulhub-cli 在本地维护一份 vulhub 检出，并提供命令来列出、检�
 - Docker，且 `docker compose`（Compose v2）或 `docker-compose`（Compose v1）至少有一个可用
 
 `vulhub init` 会检查以上全部要求，并明确指出缺少的是哪一项。
+
+vulfocus 靶场在启动时从 Docker Hub 拉取镜像，因此需要能访问 registry；vulhub 靶场不需要。
 
 ## 安装
 
@@ -58,8 +67,8 @@ vulhub del 68            # 销毁，保留 volume
 | --- | --- | --- |
 | `init` | — | 拉取 vulhub 到 `~/vulhub` 并分配编号 |
 | `update` | — | 更新本地 vulhub 检出 |
-| `ls [--json]` | — | 列出全部靶场 |
-| `search <关键词>… [--json]` | — | 按漏洞标题或靶场路径检索 |
+| `ls [--json] [-time]` | — | 列出全部靶场 |
+| `search <关键词>… [--json] [-time]` | — | 按漏洞标题或靶场路径检索 |
 | `up <靶场>[,…]` | 单个或多个 | 启动靶场 |
 | `stop <靶场>[,…]` | 单个或多个 | 停止靶场 |
 | `del <靶场>` | 单个 | 销毁靶场 |
@@ -68,6 +77,8 @@ vulhub del 68            # 销毁，保留 volume
 | `help` | — | 打印用法 |
 
 逗号分隔的多选适用于 `pull`、`up`、`stop`。`del` 是唯一不可逆的操作，只能作用于一个靶场。
+
+`-time` 让 `ls` 与 `search` 按创建时间倒序显示，新的在前。它**只改变你看到什么，绝不改变编号**——编号按路径字典序一次性分配、此后不变。没有创建时间的靶场（全部 vulhub 靶场，因为它的注册表里没有日期）排在最后。
 
 `del` 的选项：
 
@@ -92,6 +103,10 @@ vulhub del 68            # 销毁，保留 volume
 
 **靶场元数据**读取自 `environments.toml`，即 vulhub 自己的环境注册表。该文件缺失或无法解析时，工具降级为扫描目录树，此时标题不可用，且只能按路径检索。
 
+**vulfocus 来源**的工作方式不同。它的上游只有 Docker 镜像——没有 compose 文件、没有启动命令、没有任何说明。所以我们替它**合成**：第一次启动某个 vulfocus 靶场时，compose 文件被写到 `~/.local/share/vulhub-cli/vulfocus/<镜像名>/docker-compose.yml`。镜像自带 entrypoint，不需要额外命令；镜像声明的**每个**端口都会以相同的宿主端口发布，所以像 Jenkins 这样的镜像 `up` 之后会打印好几个（50000 是 agent 端口，不是 web 界面）。这份合成文件是派生数据，删掉会自动重建。
+
+vulfocus 的镜像清单及其端口**内嵌在二进制里**，因此 `init` 完全不访问 Docker Hub。维护者发版前用 `vulhub gen-vulfocus` 刷新它，见 [ADR 0002](docs/adr/0002-embedded-vulfocus-catalog.md)。
+
 ## 从源码构建
 
 ```sh
@@ -113,6 +128,17 @@ git push origin v0.1.0
 ```
 
 两个 workflow 都会断言制品是 `statically linked`。要支持其他平台，只需在这两个文件里扩充 `GOOS`/`GOARCH` 矩阵；代码本身没有平台假设。
+
+### 刷新 vulfocus 镜像清单
+
+内嵌的镜像清单会随版本变旧。重新生成：
+
+```sh
+DOCKERHUB_USERNAME=<你的用户名> DOCKERHUB_TOKEN=<PAT> vulhub gen-vulfocus
+git add internal/vulfocus/data/vulfocus.json && git commit
+```
+
+必须提供凭证：Docker Hub 拒绝匿名请求翻过 offset 100，而该命名空间有几百个镜像。只读权限的令牌即可。**不提供凭证时命令会失败，而不是写出一份截断的清单**——一份看起来完整、实际缺了大多数条目的清单，比一个报错难发现得多。
 
 ## 开发
 

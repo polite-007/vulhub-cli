@@ -3,18 +3,22 @@ package cli_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/polite-007/vulhub-cli/internal/cli"
 	"github.com/polite-007/vulhub-cli/internal/compose"
 	"github.com/polite-007/vulhub-cli/internal/gitx"
 	"github.com/polite-007/vulhub-cli/internal/hostinfo"
+	"github.com/polite-007/vulhub-cli/internal/vulfocus"
 )
 
 // --- 假的外部依赖 ---
@@ -170,12 +174,14 @@ var _ hostinfo.Info = fakeHost{}
 
 // harness 用临时目录承载真实的文件系统与真实的 environments.toml 解析。
 type harness struct {
-	t       *testing.T
-	root    string // vulhub 检出根目录
-	index   string // 索引文件路径
-	compose *fakeCompose
-	git     *fakeGit
-	host    fakeHost
+	t            *testing.T
+	root         string // vulhub 检出根目录
+	vulfocusRoot string // vulfocus 合成 compose 文件所在目录
+	index        string // 索引文件路径
+	compose      *fakeCompose
+	git          *fakeGit
+	host         fakeHost
+	vulfocus     []vulfocus.Image // 测试用的 vulfocus 镜像清单
 }
 
 func newHarness(t *testing.T) *harness {
@@ -188,8 +194,96 @@ func newHarness(t *testing.T) *harness {
 		compose: &fakeCompose{images: map[string][]string{}},
 		git:     &fakeGit{},
 		host:    fakeHost{ip: "10.0.0.5"},
+		// 默认给一份**空**的 vulfocus 清单：真实清单有四百多个镜像，
+		// 让每个测试都被它们带着跑，断言就再也收敛不了。
+		// 需要 vulfocus 靶场的测试用 seedVulfocus 自己铺。
+		vulfocus: []vulfocus.Image{},
 	}
+	h.vulfocusRoot = filepath.Join(home, ".local", "share", "vulhub-cli", "vulfocus")
 	return h
+}
+
+// seedVulfocus 铺一份可控的 vulfocus 镜像清单。
+// 传入 "镜像名=端口,端口@YYYY-MM-DD" 的形式，端口与日期都可省略。
+func (h *harness) seedVulfocus(images ...string) {
+	h.t.Helper()
+	h.vulfocus = nil
+	for _, spec := range images {
+		name, rest, _ := strings.Cut(spec, "=")
+		portsPart, datePart, _ := strings.Cut(rest, "@")
+
+		img := vulfocus.Image{Image: name}
+		for _, p := range strings.Split(portsPart, ",") {
+			if p = strings.TrimSpace(p); p == "" {
+				continue
+			}
+			n, err := strconv.Atoi(p)
+			if err != nil {
+				h.t.Fatalf("端口 %q 不是数字", p)
+			}
+			img.Ports = append(img.Ports, n)
+		}
+		if datePart != "" {
+			t, err := time.Parse("2006-01-02", datePart)
+			if err != nil {
+				h.t.Fatalf("日期 %q 解析失败：%v", datePart, err)
+			}
+			img.CreatedAt = t
+		}
+		h.vulfocus = append(h.vulfocus, img)
+	}
+}
+
+// numbersByPath 从 ls --json 的输出里取出 路径 → 编号。
+func (h *harness) numbersByPath(r result) map[string]int {
+	h.t.Helper()
+	out := make(map[string]int)
+	for _, item := range h.lsPayload(r) {
+		out[item.Path] = item.Number
+	}
+	return out
+}
+
+// titlesByPath 从 ls --json 的输出里取出 路径 → 标题。
+func (h *harness) titlesByPath(r result) map[string]string {
+	h.t.Helper()
+	out := make(map[string]string)
+	for _, item := range h.lsPayload(r) {
+		out[item.Path] = item.Name
+	}
+	return out
+}
+
+func (h *harness) lsPayload(r result) []struct {
+	Number int    `json:"number"`
+	Path   string `json:"path"`
+	Name   string `json:"name"`
+} {
+	h.t.Helper()
+	var payload []struct {
+		Number int    `json:"number"`
+		Path   string `json:"path"`
+		Name   string `json:"name"`
+	}
+	if err := json.Unmarshal([]byte(r.out), &payload); err != nil {
+		h.t.Fatalf("--json 输出不是合法 JSON：%v\n%s", err, r.out)
+	}
+	return payload
+}
+
+// vulfocusDir 返回某个 vulfocus 靶场合成 compose 文件的目录。
+func (h *harness) vulfocusDir(image string) string {
+	return filepath.Join(h.vulfocusRoot, image)
+}
+
+// composeFileOf 读回合成出来的 compose 文件内容。
+func (h *harness) composeFileOf(image string) string {
+	h.t.Helper()
+	raw, err := os.ReadFile(filepath.Join(h.vulfocusDir(image), "docker-compose.yml"))
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 // seed 在检出里铺出若干靶场，并写出 environments.toml。
@@ -280,6 +374,9 @@ func (h *harness) deps() cli.Deps {
 		VulhubRoot: h.root,
 		IndexPath:  h.index,
 		RepoURL:    "https://example.invalid/vulhub.git",
+
+		VulfocusRoot:    h.vulfocusRoot,
+		VulfocusCatalog: h.vulfocus,
 	}
 }
 

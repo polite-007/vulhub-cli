@@ -29,8 +29,12 @@ func (a *app) cmdPull(args []string) int {
 			return a.fail(err)
 		}
 		for _, env := range s.Environments {
+			dir, err := a.ensureEnvironment(env.Path)
+			if err != nil {
+				return a.fail(err)
+			}
 			fmt.Fprintf(a.out, "正在拉取 %s …\n", env.Path)
-			if err := a.deps.Compose.Pull(a.ctx, a.absDir(env.Path)); err != nil {
+			if err := a.deps.Compose.Pull(a.ctx, dir); err != nil {
 				return a.fail(err)
 			}
 		}
@@ -42,8 +46,12 @@ func (a *app) cmdPull(args []string) int {
 		return a.fail(err)
 	}
 	for _, t := range targets {
+		dir, err := a.ensureEnvironment(t.Path)
+		if err != nil {
+			return a.fail(err)
+		}
 		fmt.Fprintf(a.out, "正在拉取 %d  %s …\n", t.Number, t.Path)
-		if err := a.deps.Compose.Pull(a.ctx, a.absDir(t.Path)); err != nil {
+		if err := a.deps.Compose.Pull(a.ctx, dir); err != nil {
 			return a.fail(err)
 		}
 	}
