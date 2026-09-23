@@ -13,7 +13,10 @@ package vulfocus
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -44,6 +47,24 @@ type Environment struct {
 	Title string
 	// CreatedAt 是镜像的推送时间，零值表示未知。
 	CreatedAt time.Time
+}
+
+// LoadFile 读取一份清单文件。
+//
+// 文件不存在时返回空清单而不是错误：首次生成没有旧清单可读，那是正常情况。
+func LoadFile(path string) ([]Image, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("读取 %s: %w", path, err)
+	}
+	var images []Image
+	if err := json.Unmarshal(raw, &images); err != nil {
+		return nil, fmt.Errorf("解析 %s: %w", path, err)
+	}
+	return images, nil
 }
 
 // Images 返回内嵌的镜像清单，按镜像名排序。

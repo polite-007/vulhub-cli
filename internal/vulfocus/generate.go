@@ -59,42 +59,95 @@ func (g *Generator) client() *http.Client {
 	return &http.Client{Timeout: 60 * time.Second}
 }
 
-// Skip 记录一个无法用作靶场的镜像。
+// SkipKind 说明一个镜像为什么没进清单。
+type SkipKind int
+
+const (
+	// SkipUnusable 表示这个镜像本身就不能用作靶场——最常见的是没有 latest
+	// 标签，`docker pull` 同样拉不动它。这是**合法的跳过**，不是失败。
+	SkipUnusable SkipKind = iota
+	// SkipFailed 表示我们没能查明它的情况——限流、网络中断。
+	// 这是**失败**：清单里少的是我们不知道的东西。
+	SkipFailed
+)
+
+// Skip 记录一个没能进清单的镜像。
 type Skip struct {
 	Image  string
+	Kind   SkipKind
 	Reason string
 }
 
 // workers 是并发拉取镜像信息的协程数。
 //
-// 每个镜像要三次请求，四百多个镜像串行跑要四十多分钟。并发之后是几分钟。
-// 取 6 是保守值：Docker Hub 对未认证的 registry 请求有速率限制，
+// 取 6 是保守值：Docker Hub 对 registry 请求有速率限制，并发再高会更快撞上，
 // 而重试退避已经能兜住偶发的 429。
 const workers = 6
 
-// Generate 返回镜像清单，以及无法使用的镜像。
+// Generate 返回镜像清单，以及没能进去的镜像。
 //
-// 单个镜像不可用（最常见的是没有 latest 标签，`docker pull` 也拉不动它）
-// 不会拖垮整轮生成，但**绝不静默**：调用方必须把 skipped 报给用户。
-func (g *Generator) Generate(ctx context.Context) ([]Image, []Skip, error) {
+// existing 是上一次生成的清单。**只有上游确实变了才重新拉取**：镜像的端口只在
+// 它被重新推送时才变，而推送时间（last_updated）会告诉我们这件事。
+//
+// 这是必须的，不是优化——Docker Hub 对拉取有限额，四百多个镜像全量重拉一定会
+// 撞上限流，而增量刷新通常只需拉新增和变更的那几十个。
+//
+// 单个镜像不可用不会拖垮整轮，但**绝不静默**：调用方必须把 skipped 报给用户。
+func (g *Generator) Generate(ctx context.Context, existing []Image) ([]Image, []Skip, error) {
 	repos, err := g.List(ctx)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	known := make(map[string]Image, len(existing))
+	for _, img := range existing {
+		known[img.Image] = img
+	}
+
+	type job struct {
+		repo  Repo
+		old   Image
+		reuse bool
+	}
+	jobs := make([]job, 0, len(repos))
+	needFetch := 0
+	for _, repo := range repos {
+		old, ok := known[repo.Name]
+		// 推送时间相同即认为上游没动过。零值表示上次就没取到时间，那就重拉。
+		reuse := ok && !old.CreatedAt.IsZero() && old.CreatedAt.Equal(repo.CreatedAt)
+		if !reuse {
+			needFetch++
+		}
+		jobs = append(jobs, job{repo: repo, old: old, reuse: reuse})
 	}
 
 	type outcome struct {
 		image Image
 		skip  *Skip
 	}
-	outcomes := make([]outcome, len(repos))
+	outcomes := make([]outcome, len(jobs))
 
 	var (
-		wg     sync.WaitGroup
-		sem    = make(chan struct{}, workers)
-		done   atomic.Int64
-		report sync.Mutex
+		wg       sync.WaitGroup
+		sem      = make(chan struct{}, workers)
+		done     atomic.Int64
+		reportMu sync.Mutex
 	)
-	for i, repo := range repos {
+	report := func(repo Repo) {
+		if g.OnProgress == nil {
+			return
+		}
+		// 进度回调是共享的输出流，必须串行化，否则几路会互相插字。
+		reportMu.Lock()
+		defer reportMu.Unlock()
+		g.OnProgress(int(done.Add(1)), needFetch, repo.Name)
+	}
+
+	for i, j := range jobs {
+		if j.reuse {
+			outcomes[i] = outcome{image: j.old}
+			continue
+		}
 		wg.Add(1)
 		go func(i int, repo Repo) {
 			defer wg.Done()
@@ -102,23 +155,20 @@ func (g *Generator) Generate(ctx context.Context) ([]Image, []Skip, error) {
 			defer func() { <-sem }()
 
 			ports, err := g.Ports(ctx, repo.Name)
-			if err != nil {
-				outcomes[i] = outcome{skip: &Skip{Image: repo.Name, Reason: err.Error()}}
-			} else {
+			switch {
+			case err == nil:
 				outcomes[i] = outcome{image: Image{Image: repo.Name, Ports: ports, CreatedAt: repo.CreatedAt}}
+			case errors.Is(err, errUnusable):
+				outcomes[i] = outcome{skip: &Skip{Image: repo.Name, Kind: SkipUnusable, Reason: err.Error()}}
+			default:
+				outcomes[i] = outcome{skip: &Skip{Image: repo.Name, Kind: SkipFailed, Reason: err.Error()}}
 			}
-
-			if g.OnProgress != nil {
-				// 进度回调是共享的输出流，必须串行化，否则几路会互相插字。
-				report.Lock()
-				defer report.Unlock()
-				g.OnProgress(int(done.Add(1)), len(repos), repo.Name)
-			}
-		}(i, repo)
+			report(repo)
+		}(i, j.repo)
 	}
 	wg.Wait()
 
-	images := make([]Image, 0, len(repos))
+	images := make([]Image, 0, len(jobs))
 	var skipped []Skip
 	for _, o := range outcomes {
 		if o.skip != nil {
@@ -127,17 +177,31 @@ func (g *Generator) Generate(ctx context.Context) ([]Image, []Skip, error) {
 			images = append(images, o.image)
 		}
 	}
-
-	// 跳过比例过高说明不是"个别镜像坏了"，而是系统性问题——限流、网络故障，
-	// 或者根本没带凭证。那种情况下写出的是**一份悄悄少了一百多个靶场的清单**，
-	// 比直接失败难发现得多，所以这里必须判定整轮失败。
-	if maxSkipped := len(repos) / 10; len(skipped) > maxSkipped {
-		return nil, skipped, fmt.Errorf(
-			"有 %d/%d 个镜像取不到，比例过高，多半是系统性原因（Docker Hub 限流是最常见的）；不发半份清单",
-			len(skipped), len(repos))
-	}
 	sort.Slice(images, func(i, j int) bool { return images[i].Image < images[j].Image })
 	sort.Slice(skipped, func(i, j int) bool { return skipped[i].Image < skipped[j].Image })
+
+	// **只有"没取到"才算失败。**限流与网络中断是系统性原因，那种情况下写出的
+	// 是一份悄悄少了若干个靶场的清单，比直接失败难发现得多。
+	// 而"镜像本身不可用"（没有 latest 标签）是合法的跳过，不该拦下整轮。
+	failed := 0
+	for _, s := range skipped {
+		if s.Kind == SkipFailed {
+			failed++
+		}
+	}
+	if limit := needFetch / 10; failed > limit {
+		return nil, skipped, fmt.Errorf(
+			"有 %d/%d 个镜像没能取到，比例过高，多半是系统性原因（Docker Hub 限流或网络中断）；不发半份清单",
+			failed, needFetch)
+	}
+
+	// 兜底：结果比上一次**大幅缩水**，说明有东西整体坏掉了（凭证失效、上游
+	// 大改），而那未必会表现为上面那种"失败"。宁可失败也不要发出一份残缺清单。
+	if len(existing) > 0 && len(images) < len(existing)*8/10 {
+		return nil, skipped, fmt.Errorf(
+			"结果是 %d 个镜像，比上一次的 %d 个少了两成以上；多半是系统性故障，不发残缺清单",
+			len(images), len(existing))
+	}
 
 	if len(images) == 0 {
 		return nil, skipped, errors.New("没有取到任何可用的镜像")
@@ -256,6 +320,13 @@ func (g *Generator) authToken(ctx context.Context) (string, error) {
 	return g.jwt, nil
 }
 
+// errUnusable 表示这个镜像**本身**就不能用作靶场，与"我们没取到"是两回事。
+var errUnusable = errors.New("镜像不可用")
+
+// errNotFound 表示服务端明确说"没有这个东西"（或其不对外公开）。
+// 重试没有意义，也不该算作"我们没查明"。
+var errNotFound = errors.New("not found")
+
 // Ports 返回一个镜像声明的 TCP 端口，升序。
 //
 // 只读 manifest 与 config blob（约 12KB），不拉取镜像本身。
@@ -283,8 +354,11 @@ func (g *Generator) Ports(ctx context.Context, image string) ([]int, error) {
 	if err != nil {
 		// 我们合成的 compose 文件不写标签，也就是用 latest。
 		// 没有 latest 的镜像，`docker pull vulfocus/<名字>` 同样拉不动，
-		// 因此它不能算作一个可用的靶场。
-		return nil, fmt.Errorf("没有 latest 标签，无法作为靶场使用: %w", err)
+		// 因此它不能算作一个可用的靶场——这是合法跳过，不是失败。
+		if errors.Is(err, errNotFound) {
+			return nil, fmt.Errorf("%w: 没有 latest 标签或仓库不公开", errUnusable)
+		}
+		return nil, err
 	}
 
 	var cfg struct {
@@ -441,7 +515,7 @@ func (g *Generator) doOnce(ctx context.Context, method, url string, headers map[
 	case resp.StatusCode == http.StatusOK:
 		return body, false, nil
 	case resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusNotFound:
-		return nil, false, fmt.Errorf("HTTP %d: %s", resp.StatusCode, detail)
+		return nil, false, fmt.Errorf("%w: HTTP %d: %s", errNotFound, resp.StatusCode, detail)
 	case resp.StatusCode == http.StatusForbidden, resp.StatusCode == http.StatusTooManyRequests, resp.StatusCode >= 500:
 		return nil, true, fmt.Errorf("HTTP %d: %s", resp.StatusCode, detail)
 	default:

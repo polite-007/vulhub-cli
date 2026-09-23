@@ -31,26 +31,32 @@ func (a *app) cmdGenVulfocus(args []string) int {
 	}
 	fmt.Fprintln(a.out, "正在从 Docker Hub 读取 vulfocus 的镜像清单…")
 
+	// 读入上一次的清单。生成器只重拉**上游确实变了**的镜像——
+	// Docker Hub 有限流，全量重拉一定会撞上。
+	existing, err := vulfocus.LoadFile(opts.outPath)
+	if err != nil {
+		return a.fail(err)
+	}
+	if len(existing) > 0 {
+		fmt.Fprintf(a.out, "已有清单 %d 条，只重拉新增或变更的镜像\n", len(existing))
+	}
+
 	gen := &vulfocus.Generator{
 		OnProgress: a.progressReporter(),
 		Username:   opts.username,
 		Password:   opts.token,
 	}
-	images, skipped, err := gen.Generate(a.ctx)
-	if err != nil {
-		return a.fail(err)
-	}
+	images, skipped, err := gen.Generate(a.ctx, existing)
 	if a.isTTY {
 		fmt.Fprintln(a.out) // 结束进度行
 	}
 
-	// 跳过的镜像必须报出来：一份"看起来正常但悄悄少了几个"的清单，
-	// 比直接失败更难被发现。
-	if len(skipped) > 0 {
-		fmt.Fprintf(a.errOut, "\n以下 %d 个镜像不可用，已跳过：\n", len(skipped))
-		for _, s := range skipped {
-			fmt.Fprintf(a.errOut, "  %s：%s\n", s.Image, s.Reason)
-		}
+	// **无论成败都先报出没进清单的镜像。**
+	// 失败时它正是唯一的诊断依据——曾经这里只在成功路径上打印，
+	// 于是守卫触发时只留下一句"有 N 个取不到"，维护者只能靠猜。
+	reportSkips(a, skipped)
+	if err != nil {
+		return a.fail(err)
 	}
 
 	raw, err := json.MarshalIndent(images, "", "  ")
@@ -66,6 +72,33 @@ func (a *app) cmdGenVulfocus(args []string) int {
 
 	fmt.Fprintf(a.out, "已写入 %s：%d 个镜像\n", opts.outPath, len(images))
 	return ExitOK
+}
+
+// reportSkips 报出没进清单的镜像，按性质分开：不可用是正常的，取不到不是。
+func reportSkips(a *app, skipped []vulfocus.Skip) {
+	var unusable, missed []vulfocus.Skip
+	for _, s := range skipped {
+		if s.Kind == vulfocus.SkipUnusable {
+			unusable = append(unusable, s)
+		} else {
+			missed = append(missed, s)
+		}
+	}
+	for _, group := range []struct {
+		items []vulfocus.Skip
+		title string
+	}{
+		{unusable, "镜像本身不可用（没有 latest 标签或仓库不公开），无法作为靶场，属正常跳过"},
+		{missed, "没能取到（限流或网络中断）——这是失败，不是跳过"},
+	} {
+		if len(group.items) == 0 {
+			continue
+		}
+		fmt.Fprintf(a.errOut, "\n%s（%d 个）：\n", group.title, len(group.items))
+		for _, s := range group.items {
+			fmt.Fprintf(a.errOut, "  %s：%s\n", s.Image, s.Reason)
+		}
+	}
 }
 
 // progressReporter 在终端上原地刷新进度；不是终端时按 25 个一次输出，
