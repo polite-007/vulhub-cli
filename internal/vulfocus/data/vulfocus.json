@@ -23,6 +23,20 @@
     "created_at": "2022-04-06T10:10:19.363693Z"
   },
   {
+    "image": "9router-cve_2026_55641",
+    "ports": [
+      20128
+    ],
+    "created_at": "2026-09-21T10:37:39.552779Z"
+  },
+  {
+    "image": "9router-cve_2026_55641-fix",
+    "ports": [
+      20128
+    ],
+    "created_at": "2026-09-21T11:24:02.704071Z"
+  },
+  {
     "image": "activemq-cve_2016_3088",
     "ports": [
       8161,
@@ -191,6 +205,20 @@
     "created_at": "2021-07-19T07:58:52.930055Z"
   },
   {
+    "image": "audiobookshelf-cve_2026_71209",
+    "ports": [
+      80
+    ],
+    "created_at": "2026-09-22T10:57:06.64165Z"
+  },
+  {
+    "image": "audiobookshelf-cve_2026_71209-fix",
+    "ports": [
+      80
+    ],
+    "created_at": "2026-09-22T10:57:38.751278Z"
+  },
+  {
     "image": "bash-cve_2014_6271",
     "ports": [
       80
@@ -255,6 +283,20 @@
       3306
     ],
     "created_at": "2022-03-21T07:33:18.850791Z"
+  },
+  {
+    "image": "clipbucket-cve_2026_21875",
+    "ports": [
+      80
+    ],
+    "created_at": "2026-09-21T10:42:26.253822Z"
+  },
+  {
+    "image": "clipbucket-cve_2026_21875-fix",
+    "ports": [
+      80
+    ],
+    "created_at": "2026-09-21T11:24:16.613231Z"
   },
   {
     "image": "cmseasy-rce",
@@ -676,6 +718,20 @@
     "created_at": "2021-07-12T08:57:08.902601Z"
   },
   {
+    "image": "flowise-cve_2026_56270",
+    "ports": [
+      3000
+    ],
+    "created_at": "2026-09-22T11:09:05.987553Z"
+  },
+  {
+    "image": "flowise-cve_2026_56270-fix",
+    "ports": [
+      3000
+    ],
+    "created_at": "2026-09-22T11:10:04.530573Z"
+  },
+  {
     "image": "forgerok_openam-cve_2021_35464",
     "ports": [
       8080
@@ -719,6 +775,38 @@
       8080
     ],
     "created_at": "2022-06-16T03:11:27.485412Z"
+  },
+  {
+    "image": "gitea-cve_2026_59774",
+    "ports": [
+      22,
+      3000
+    ],
+    "created_at": "2026-09-22T10:56:22.701406Z"
+  },
+  {
+    "image": "gitea-cve_2026_59774-fix",
+    "ports": [
+      22,
+      3000
+    ],
+    "created_at": "2026-09-22T10:56:29.000569Z"
+  },
+  {
+    "image": "gitea-cve_2026_60004",
+    "ports": [
+      22,
+      3000
+    ],
+    "created_at": "2026-09-22T10:55:50.454485Z"
+  },
+  {
+    "image": "gitea-cve_2026_60004-fix",
+    "ports": [
+      22,
+      3000
+    ],
+    "created_at": "2026-09-22T10:56:15.667494Z"
   },
   {
     "image": "gitlab-cve_2021_22205",
@@ -776,6 +864,20 @@
       8153
     ],
     "created_at": "2021-12-13T04:34:39.70402Z"
+  },
+  {
+    "image": "gotenberg-cve_2026_42589",
+    "ports": [
+      3000
+    ],
+    "created_at": "2026-09-21T10:43:53.737959Z"
+  },
+  {
+    "image": "gotenberg-cve_2026_42589-fix",
+    "ports": [
+      3000
+    ],
+    "created_at": "2026-09-21T11:24:17.407781Z"
   },
   {
     "image": "grafana-cve_2021_43798",
@@ -991,6 +1093,22 @@
       50000
     ],
     "created_at": "2020-12-24T15:05:18.659684Z"
+  },
+  {
+    "image": "jenkins-cve_2026_84645",
+    "ports": [
+      8080,
+      50000
+    ],
+    "created_at": "2026-09-21T10:36:55.088579Z"
+  },
+  {
+    "image": "jenkins-cve_2026_84645-fix",
+    "ports": [
+      8080,
+      50000
+    ],
+    "created_at": "2026-09-21T11:24:02.325973Z"
   },
   {
     "image": "jetbrains-teamcity-cve_2026_63077",
@@ -1257,6 +1375,20 @@
     "created_at": "2020-04-20T12:57:28.493896Z"
   },
   {
+    "image": "lightrag-cve_2026_61808",
+    "ports": [
+      9621
+    ],
+    "created_at": "2026-09-21T10:54:23.636913Z"
+  },
+  {
+    "image": "lightrag-cve_2026_61808-fix",
+    "ports": [
+      9621
+    ],
+    "created_at": "2026-09-21T11:24:29.593617Z"
+  },
+  {
     "image": "litellm-cve_2026_42271",
     "ports": [
       4000
@@ -1269,6 +1401,20 @@
       4000
     ],
     "created_at": "2026-09-17T11:26:30.758092Z"
+  },
+  {
+    "image": "litellm-default-passwd",
+    "ports": [
+      4000
+    ],
+    "created_at": "2026-09-21T10:50:36.673355Z"
+  },
+  {
+    "image": "litellm-default-passwd-fix",
+    "ports": [
+      4000
+    ],
+    "created_at": "2026-09-21T11:24:17.012096Z"
   },
   {
     "image": "log4j-cve_2017_5645",
@@ -1354,6 +1500,20 @@
     "created_at": "2021-11-15T01:58:20.976055Z"
   },
   {
+    "image": "mlflow-cve_2026_2614",
+    "ports": [
+      5000
+    ],
+    "created_at": "2026-09-21T10:37:08.343081Z"
+  },
+  {
+    "image": "mlflow-cve_2026_2614-fix",
+    "ports": [
+      5000
+    ],
+    "created_at": "2026-09-21T11:24:00.999967Z"
+  },
+  {
     "image": "mogodb-cve_2013_1892",
     "ports": [
       27017
@@ -1389,6 +1549,28 @@
       3306
     ],
     "created_at": "2021-07-20T07:05:56.210231Z"
+  },
+  {
+    "image": "nacos-auth-bypass",
+    "ports": [
+      7848,
+      8080,
+      8848,
+      9848,
+      9849
+    ],
+    "created_at": "2026-09-22T10:45:36.496277Z"
+  },
+  {
+    "image": "nacos-auth-bypass-fix",
+    "ports": [
+      7848,
+      8080,
+      8848,
+      9848,
+      9849
+    ],
+    "created_at": "2026-09-22T12:30:41.34086Z"
   },
   {
     "image": "nagios-cve_2016_9565",
@@ -1469,6 +1651,49 @@
       3000
     ],
     "created_at": "2026-09-17T11:50:11.292653Z"
+  },
+  {
+    "image": "nexus-cve_2018_16621",
+    "ports": [
+      8081
+    ],
+    "created_at": "2022-06-30T06:58:09.037768Z"
+  },
+  {
+    "image": "nexus-cve_2019_5475",
+    "ports": [
+      8080,
+      8081
+    ],
+    "created_at": "2021-06-16T01:50:59.179024Z"
+  },
+  {
+    "image": "nexus-cve_2019_7238",
+    "ports": [
+      8081
+    ],
+    "created_at": "2020-04-29T08:29:02.112858Z"
+  },
+  {
+    "image": "nexus-cve_2020_10199",
+    "ports": [
+      8081
+    ],
+    "created_at": "2020-04-22T05:47:49.995943Z"
+  },
+  {
+    "image": "nexus-cve_2020_10204",
+    "ports": [
+      8081
+    ],
+    "created_at": "2020-05-10T15:20:39.67096Z"
+  },
+  {
+    "image": "nexus-cve_2020_11444",
+    "ports": [
+      8081
+    ],
+    "created_at": "2021-06-17T09:51:44.452506Z"
   },
   {
     "image": "nginx-cve_2016_1247",
@@ -1630,6 +1855,20 @@
       3306
     ],
     "created_at": "2021-11-09T03:21:08.992209Z"
+  },
+  {
+    "image": "open-webui-cve_2026_70485",
+    "ports": [
+      8080
+    ],
+    "created_at": "2026-09-22T11:02:49.440063Z"
+  },
+  {
+    "image": "open-webui-cve_2026_70485-fix",
+    "ports": [
+      8080
+    ],
+    "created_at": "2026-09-22T11:07:24.22446Z"
   },
   {
     "image": "openfire-cve_2019_18393",
@@ -1957,6 +2196,20 @@
       3000
     ],
     "created_at": "2022-03-09T10:19:45.435707Z"
+  },
+  {
+    "image": "ruoyi-vue-plus-auth-register-sql",
+    "ports": [
+      8080
+    ],
+    "created_at": "2026-09-21T10:50:05.704609Z"
+  },
+  {
+    "image": "ruoyi-vue-plus-auth-register-sql-fix",
+    "ports": [
+      8080
+    ],
+    "created_at": "2026-09-21T11:24:16.776625Z"
   },
   {
     "image": "salt-cve_2021_25281",
@@ -2453,6 +2706,22 @@
       8080
     ],
     "created_at": "2022-06-15T10:08:23.688731Z"
+  },
+  {
+    "image": "tdengine-default-passwd",
+    "ports": [
+      6030,
+      6041
+    ],
+    "created_at": "2026-09-21T10:55:52.301105Z"
+  },
+  {
+    "image": "tdengine-default-passwd-fix",
+    "ports": [
+      6030,
+      6041
+    ],
+    "created_at": "2026-09-21T11:24:30.073784Z"
   },
   {
     "image": "thinkadmin-cve_2020_25540",
@@ -3135,6 +3404,20 @@
       27017
     ],
     "created_at": "2021-07-08T13:40:39.348246Z"
+  },
+  {
+    "image": "yeswiki-cve_2026_46670",
+    "ports": [
+      80
+    ],
+    "created_at": "2026-09-21T11:01:04.522449Z"
+  },
+  {
+    "image": "yeswiki-cve_2026_46670-fix",
+    "ports": [
+      80
+    ],
+    "created_at": "2026-09-21T11:24:03.35713Z"
   },
   {
     "image": "youphptube-cve_2019_18662",
