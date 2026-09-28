@@ -37,6 +37,13 @@
     "created_at": "2026-09-21T11:24:02.704071Z"
   },
   {
+    "image": "9router-cve_2026_56677-fix",
+    "ports": [
+      20128
+    ],
+    "created_at": "2026-09-24T03:42:18.305454Z"
+  },
+  {
     "image": "activemq-cve_2016_3088",
     "ports": [
       8161,
@@ -154,6 +161,13 @@
       8888
     ],
     "created_at": "2020-06-24T09:57:29.60296Z"
+  },
+  {
+    "image": "arcane-cve_2026_42461",
+    "ports": [
+      3552
+    ],
+    "created_at": "2026-09-24T04:03:08.500605Z"
   },
   {
     "image": "aria2-rce",
@@ -732,6 +746,13 @@
     "created_at": "2026-09-22T11:10:04.530573Z"
   },
   {
+    "image": "flowiseai-cve_2025_71334-fix",
+    "ports": [
+      3000
+    ],
+    "created_at": "2026-09-24T04:45:50.968532Z"
+  },
+  {
     "image": "forgerok_openam-cve_2021_35464",
     "ports": [
       8080
@@ -827,6 +848,15 @@
     "created_at": "2021-06-23T09:43:24.738504Z"
   },
   {
+    "image": "gitlab-cve_2026_19478-fix",
+    "ports": [
+      22,
+      80,
+      443
+    ],
+    "created_at": "2026-09-24T03:35:42.545237Z"
+  },
+  {
     "image": "gitlab-cve_2026_85706",
     "ports": [
       22,
@@ -866,6 +896,20 @@
     "created_at": "2021-12-13T04:34:39.70402Z"
   },
   {
+    "image": "gogs-cve_2026_52815",
+    "ports": [
+      3000
+    ],
+    "created_at": "2026-09-24T04:08:33.500984Z"
+  },
+  {
+    "image": "gogs-cve_2026_52815-fix",
+    "ports": [
+      3000
+    ],
+    "created_at": "2026-09-24T04:08:53.979432Z"
+  },
+  {
     "image": "gotenberg-cve_2026_42589",
     "ports": [
       3000
@@ -878,6 +922,13 @@
       3000
     ],
     "created_at": "2026-09-21T11:24:17.407781Z"
+  },
+  {
+    "image": "gotenberg-cve_2026_42596-fix",
+    "ports": [
+      3000
+    ],
+    "created_at": "2026-09-24T03:32:02.760371Z"
   },
   {
     "image": "grafana-cve_2021_43798",
@@ -1061,6 +1112,20 @@
       8080
     ],
     "created_at": "2020-05-22T03:52:46.437839Z"
+  },
+  {
+    "image": "jdwp_unauth_access",
+    "ports": [
+      8000
+    ],
+    "created_at": "2026-09-24T10:22:08.137339Z"
+  },
+  {
+    "image": "jdwp_unauth_access-fix",
+    "ports": [
+      8000
+    ],
+    "created_at": "2026-09-24T10:31:15.720741Z"
   },
   {
     "image": "jenkins-cve_2015_8103",
@@ -1449,6 +1514,13 @@
       3306
     ],
     "created_at": "2021-05-21T07:44:42.777491Z"
+  },
+  {
+    "image": "magicmirror-cve_2026_63642-fix",
+    "ports": [
+      8080
+    ],
+    "created_at": "2026-09-24T03:52:10.063149Z"
   },
   {
     "image": "marimo-cve_2026_39987",
@@ -3280,6 +3352,20 @@
       8025
     ],
     "created_at": "2022-03-14T03:41:41.686737Z"
+  },
+  {
+    "image": "wpadverts-cve_2026_11801",
+    "ports": [
+      80
+    ],
+    "created_at": "2026-09-24T03:28:23.516065Z"
+  },
+  {
+    "image": "wpadverts-cve_2026_11801-fix",
+    "ports": [
+      80
+    ],
+    "created_at": "2026-09-24T03:29:53.981824Z"
   },
   {
     "image": "wso2-cve_2022_29464",
