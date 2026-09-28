@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/polite-007/vulhub-cli/internal/compose"
+	"github.com/polite-007/vulhub-cli/internal/vulfocus"
 )
 
 // statusJSON 是 status --json 的输出单元。
@@ -79,9 +80,17 @@ func (a *app) cmdStatus(args []string) int {
 	}
 
 	fmt.Fprintln(a.out, "运行中的靶场：")
+	hasForeign := false
 	for _, g := range groups {
 		number, name := a.numberAndTitle(g.Path, s)
-		line := fmt.Sprintf("\n%4d  %s", number, g.Path)
+		label := fmt.Sprintf("%4d", number)
+		if number == 0 {
+			// 没有编号说明它不是靶场，而是这台机器上别人的 compose 项目。
+			// 显示 0 会让人以为那是个可以拿去当参数的编号。
+			label = "   -"
+			hasForeign = true
+		}
+		line := fmt.Sprintf("\n%s  %s", label, g.Path)
 		if name != "" {
 			line += "  " + name
 		}
@@ -89,6 +98,9 @@ func (a *app) cmdStatus(args []string) int {
 		for _, c := range g.Containers {
 			fmt.Fprintf(a.out, "        %-40s %s%s\n", c.Name, c.State, formatPorts(c.Ports))
 		}
+	}
+	if hasForeign {
+		fmt.Fprintln(a.out, "\n编号为 - 的不是靶场：它们不在 vulhub 检出或 vulfocus 合成目录之内。")
 	}
 	return ExitOK
 }
@@ -111,15 +123,36 @@ func (a *app) groupByEnvironment(containers []compose.Container) []runningGroup 
 
 // relativeToCheckout 把容器标签里的工作目录还原成靶场路径。
 //
-// 返回 false 表示这个工作目录根本不是靶场——它是这台机器上别人的 compose 项目。
-// 调用方必须据此把它排除在靶场语义之外，否则会把无关项目当成靶场处理。
+// **两个来源的靶场落在不同的根目录下，所以两个都要试。**只试检出目录的话，
+// vulfocus 的容器会被判成"在检出之外"，于是 status 里显示一长串绝对路径、
+// 编号是 0——而那个路径根本不能当命令参数用。
+//
+// 返回 false 表示这个工作目录不是靶场：它是这台机器上别人的 compose 项目。
 func (a *app) relativeToCheckout(workDir string) (string, bool) {
 	if workDir == "" {
 		return "", false
 	}
-	rel, err := filepath.Rel(a.deps.VulhubRoot, workDir)
+	// vulhub 来源：靶场路径就是检出内的相对路径。
+	if rel, ok := relativePath(a.deps.VulhubRoot, workDir); ok {
+		return rel, true
+	}
+	// vulfocus 来源：合成目录下的一级子目录名就是镜像名。
+	if rel, ok := relativePath(a.deps.VulfocusRoot, workDir); ok {
+		if image, _, _ := strings.Cut(rel, "/"); image != "" {
+			return vulfocus.PathOf(image), true
+		}
+	}
+	return "", false
+}
+
+// relativePath 判断 child 是否在 root 之内；是则返回斜杠分隔的相对路径。
+func relativePath(root, child string) (string, bool) {
+	if root == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(root, child)
 	if err != nil {
-		// 跨盘符等情况无法求相对路径，那必然在检出之外。
+		// 跨盘符等情况无法求相对路径，那必然在 root 之外。
 		return "", false
 	}
 	rel = filepath.ToSlash(rel)

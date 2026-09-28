@@ -109,6 +109,11 @@ func ImageName(path string) string {
 	return strings.TrimPrefix(path, prefix)
 }
 
+// PathOf 返回镜像名对应的靶场路径。
+func PathOf(image string) string {
+	return prefix + image
+}
+
 // Reference 返回镜像的完整引用，含命名空间。
 func Reference(image string) string {
 	return namespace + "/" + image

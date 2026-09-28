@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -370,6 +371,38 @@ func numbersInDisplayOrder(t *testing.T, out string) []int {
 		numbers = append(numbers, n)
 	}
 	return numbers
+}
+
+// status 必须把 vulfocus 的容器还原成**靶场路径**，而不是容器标签里那串
+// 绝对路径——后者不能当命令参数用，而编号会因此查不到、显示成 0。
+func TestStatusResolvesVulfocusContainersToEnvironmentPaths(t *testing.T) {
+	h := newHarness(t)
+	h.seedVulfocus("redis-cve_2022_0543=6379")
+	h.run("ls").requireCode(t, 0) // 分配编号 1
+
+	dir := h.vulfocusDir("redis-cve_2022_0543")
+	h.compose.containers = []compose.Container{{
+		Name: "redis-target-1", Service: "target", State: "running", WorkDir: dir,
+	}}
+
+	r := h.run("status").requireCode(t, 0)
+	r.requireOut(t, "1  vulfocus/redis-cve_2022_0543")
+	// 关键：不能把容器标签里的绝对路径原样显示出来。
+	r.requireNoOut(t, dir)
+}
+
+// 不在任何来源之内的 compose 项目不是靶场。它的编号不能显示成 0——
+// 那会让人以为 0 是个可以拿去当参数的编号。
+func TestStatusMarksContainersThatAreNotEnvironments(t *testing.T) {
+	h := newHarness(t)
+	h.compose.containers = []compose.Container{{
+		Name: "someone-elses-1", Service: "web", State: "running",
+		WorkDir: filepath.Join(string(filepath.Separator), "srv", "someone-elses-project"),
+	}}
+
+	r := h.run("status").requireCode(t, 0)
+	r.requireOut(t, "不是靶场")     // 脚注说清楚
+	r.requireNoOut(t, "   0  ") // 但不要把 0 当编号显示
 }
 
 func TestStatusGroupsVulfocusEnvironmentLikeAnyOther(t *testing.T) {
