@@ -49,7 +49,7 @@ func (a *app) cmdStatus(args []string) int {
 		return a.usageError(errors.New("status 不接受位置参数"))
 	}
 
-	containers, err := a.deps.Compose.Containers(a.ctx, "")
+	containers, err := a.deps.Compose.Containers(a.ctx, "", false)
 	if err != nil {
 		return a.fail(err)
 	}

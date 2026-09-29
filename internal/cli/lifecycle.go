@@ -38,9 +38,38 @@ func (a *app) cmdUp(args []string) int {
 		if err := a.deps.Compose.Up(a.ctx, dir); err != nil {
 			return a.fail(err)
 		}
+		a.reportContainerState(t, dir)
 		a.printAccessURLs(t)
 	}
 	return ExitOK
+}
+
+// reportContainerState 在 up 之后确认靶场真的跑起来了。
+//
+// `docker compose up -d` 只要容器**创建**成功就返回 0，哪怕它下一秒就退出。
+// 不说这一句的话，用户看到的是"正在启动"紧跟 status 里的"没有运行中的靶场"，
+// 中间没有任何解释——他只能猜是不是镜像坏了。
+func (a *app) reportContainerState(t target, dir string) {
+	all, err := a.deps.Compose.Containers(a.ctx, dir, true)
+	if err != nil || len(all) == 0 {
+		return
+	}
+
+	var stopped []compose.Container
+	for _, c := range all {
+		if c.State != "running" {
+			stopped = append(stopped, c)
+		}
+	}
+	if len(stopped) == 0 {
+		return
+	}
+
+	fmt.Fprintf(a.errOut, "\n警告：%s 有容器没有处于运行状态，环境可能没有正常跑起来。\n", t.Path)
+	for _, c := range stopped {
+		fmt.Fprintf(a.errOut, "  %s：%s（退出码 %d）\n", c.Name, c.State, c.ExitCode)
+	}
+	fmt.Fprintln(a.errOut, "查看原因：docker logs <上面那个容器名> --tail 50")
 }
 
 // printAccessURLs 打印靶场全部映射到宿主机的端口。
@@ -51,7 +80,7 @@ func (a *app) cmdUp(args []string) int {
 // 输出不带协议前缀：靶场里既有 web 服务也有数据库，给 3306 标上 http://
 // 是一句假话，而 主机:端口 本身已经足够可用。
 func (a *app) printAccessURLs(t target) {
-	containers, err := a.deps.Compose.Containers(a.ctx, a.absDir(t.Path))
+	containers, err := a.deps.Compose.Containers(a.ctx, a.absDir(t.Path), false)
 	if err != nil {
 		return
 	}
@@ -144,7 +173,9 @@ func (a *app) cmdDel(args []string) int {
 
 	// 无法确认该靶场在跑什么时不要继续。这是不可逆操作，
 	// 打印"没有运行中的容器"而实际有东西在跑，比直接失败危险得多。
-	containers, err := a.deps.Compose.Containers(a.ctx, dir)
+	// 这里要连**已退出**的容器一起列：`down` 会把它们一并删掉，
+	// 只报运行中的会少报。
+	containers, err := a.deps.Compose.Containers(a.ctx, dir, true)
 	if err != nil {
 		return a.errorf("无法确认该靶场的运行状态，已中止：%v", err)
 	}

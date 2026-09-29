@@ -87,19 +87,20 @@ func (f *fakeCompose) RemoveImages(_ context.Context, images []string) error {
 	return f.removeErr
 }
 
-func (f *fakeCompose) Containers(_ context.Context, workDir string) ([]compose.Container, error) {
+func (f *fakeCompose) Containers(_ context.Context, workDir string, includeStopped bool) ([]compose.Container, error) {
 	f.containerDir = append(f.containerDir, workDir)
 	if f.containerErr != nil {
 		return nil, f.containerErr
 	}
-	if workDir == "" {
-		return f.containers, nil
-	}
 	var out []compose.Container
 	for _, c := range f.containers {
-		if c.WorkDir == workDir {
-			out = append(out, c)
+		if workDir != "" && c.WorkDir != workDir {
+			continue
 		}
+		if !includeStopped && c.State != "running" {
+			continue
+		}
+		out = append(out, c)
 	}
 	return out, nil
 }
@@ -414,6 +415,14 @@ func (r result) requireErr(t *testing.T, want string) result {
 	t.Helper()
 	if !strings.Contains(r.err, want) {
 		t.Fatalf("stderr 未包含 %q\n实际 stderr:\n%s", want, r.err)
+	}
+	return r
+}
+
+func (r result) requireNoErr(t *testing.T, unwanted string) result {
+	t.Helper()
+	if strings.Contains(r.err, unwanted) {
+		t.Fatalf("stderr 不应包含 %q\n实际 stderr:\n%s", unwanted, r.err)
 	}
 	return r
 }

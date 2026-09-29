@@ -31,6 +31,8 @@ vulhub-cli 在本地维护一份 vulhub 检出，并提供命令来列出、检�
 
 `vulhub init` 会检查以上全部要求，并明确指出缺少的是哪一项。
 
+`vulhub up` 会在容器没有真正跑起来时明确告诉你——`docker compose up -d` 只要容器**创建**成功就返回成功，哪怕它下一秒就退出，所以工具会在启动后确认一次，容器死了就打印退出码。
+
 vulfocus 靶场在启动时从 Docker Hub 拉取镜像，因此需要能访问 registry；vulhub 靶场不需要。
 
 ## 安装

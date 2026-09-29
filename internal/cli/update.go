@@ -51,7 +51,7 @@ func (a *app) cmdUpdate(args []string) int {
 // update 不阻止正在运行的靶场，但用户需要知道哪些环境的内容已经变了、
 // 继续用下去会和他看到的文件对不上。
 func (a *app) reportAffectedRunning(changed []string, s *state) {
-	containers, err := a.deps.Compose.Containers(a.ctx, "")
+	containers, err := a.deps.Compose.Containers(a.ctx, "", false)
 	if err != nil || len(containers) == 0 {
 		return
 	}

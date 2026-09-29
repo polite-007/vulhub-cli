@@ -31,6 +31,8 @@ Both share a single numbering space, so `68` means the same thing regardless of 
 
 `vulhub init` checks for all of these and reports specifically which one is missing.
 
+`vulhub up` reports when a container fails to stay up — `docker compose up -d` returns success as soon as a container is *created*, even if it exits a second later, so the tool checks afterwards and prints the exit code if something died.
+
 vulfocus environments are pulled from Docker Hub when you start them, so those need registry access. vulhub environments do not.
 
 ## Installation

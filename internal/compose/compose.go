@@ -32,12 +32,13 @@ type PortMapping struct {
 
 // Container 是一个由 compose 创建的容器。
 type Container struct {
-	Name    string
-	Project string
-	Service string
-	WorkDir string
-	State   string
-	Ports   []PortMapping
+	Name     string
+	Project  string
+	Service  string
+	WorkDir  string
+	State    string
+	ExitCode int
+	Ports    []PortMapping
 }
 
 // Runner 是编排端口，测试中以假对象替换。
@@ -53,7 +54,8 @@ type Runner interface {
 	// RemoveImages 删除镜像。失败是常见的（镜像被其他容器占用），由调用方决定如何处理。
 	RemoveImages(ctx context.Context, images []string) error
 	// Containers 返回全机由 compose 创建的容器；workDir 非空时只返回属于该靶场的容器。
-	Containers(ctx context.Context, workDir string) ([]Container, error)
+	// includeStopped 为真时连已退出的也返回——用来区分"没起来"和"起来又挂了"。
+	Containers(ctx context.Context, workDir string, includeStopped bool) ([]Container, error)
 }
 
 // DockerRunner 是 Runner 的真实实现。
@@ -141,9 +143,12 @@ func (r *DockerRunner) RemoveImages(ctx context.Context, images []string) error 
 	return nil
 }
 
-// Containers 返回全机由 compose 创建的容器。
-func (r *DockerRunner) Containers(ctx context.Context, workDir string) ([]Container, error) {
+// Containers 返回由 compose 创建的容器。workDir 非空时只返回属于该靶场的。
+func (r *DockerRunner) Containers(ctx context.Context, workDir string, includeStopped bool) ([]Container, error) {
 	psArgs := []string{"ps", "-q", "--filter", "label=" + LabelProject}
+	if includeStopped {
+		psArgs = append(psArgs, "-a")
+	}
 	if workDir != "" {
 		psArgs = append(psArgs, "--filter", "label="+LabelWorkDir+"="+workDir)
 	}
@@ -172,7 +177,8 @@ type portBinding struct {
 type inspectResult struct {
 	Name  string `json:"Name"`
 	State struct {
-		Status string `json:"Status"`
+		Status   string `json:"Status"`
+		ExitCode int    `json:"ExitCode"`
 	} `json:"State"`
 	Config struct {
 		Labels map[string]string `json:"Labels"`
@@ -191,12 +197,13 @@ func parseInspect(raw string) ([]Container, error) {
 	containers := make([]Container, 0, len(results))
 	for _, res := range results {
 		containers = append(containers, Container{
-			Name:    strings.TrimPrefix(res.Name, "/"),
-			Project: res.Config.Labels[LabelProject],
-			Service: res.Config.Labels[LabelService],
-			WorkDir: res.Config.Labels[LabelWorkDir],
-			State:   res.State.Status,
-			Ports:   parsePorts(res.NetworkSettings.Ports),
+			Name:     strings.TrimPrefix(res.Name, "/"),
+			Project:  res.Config.Labels[LabelProject],
+			Service:  res.Config.Labels[LabelService],
+			WorkDir:  res.Config.Labels[LabelWorkDir],
+			State:    res.State.Status,
+			ExitCode: res.State.ExitCode,
+			Ports:    parsePorts(res.NetworkSettings.Ports),
 		})
 	}
 	sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })

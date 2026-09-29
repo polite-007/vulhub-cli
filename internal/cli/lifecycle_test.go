@@ -64,11 +64,11 @@ func TestUpPrintsEveryPublishedPortNotJustOne(t *testing.T) {
 	h.seed("joomla/CVE-2015-8562=Joomla RCE")
 	h.compose.containers = []compose.Container{
 		{
-			Name: "web", Service: "web", WorkDir: h.dir("joomla/CVE-2015-8562"),
+			Name: "web", Service: "web", State: "running", WorkDir: h.dir("joomla/CVE-2015-8562"),
 			Ports: []compose.PortMapping{{HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}},
 		},
 		{
-			Name: "mysql", Service: "mysql", WorkDir: h.dir("joomla/CVE-2015-8562"),
+			Name: "mysql", Service: "mysql", State: "running", WorkDir: h.dir("joomla/CVE-2015-8562"),
 			Ports: []compose.PortMapping{{HostPort: 3306, ContainerPort: 3306, Protocol: "tcp"}},
 		},
 	}
@@ -84,7 +84,7 @@ func TestUpFallsBackToPlaceholderWhenHostIPIsUnavailable(t *testing.T) {
 	h.seed("activemq/CVE-2023-46604=Apache ActiveMQ RCE")
 	h.host = fakeHost{err: errors.New("没有可用网卡")}
 	h.compose.containers = []compose.Container{{
-		Name: "web", Service: "web", WorkDir: h.dir("activemq/CVE-2023-46604"),
+		Name: "web", Service: "web", State: "running", WorkDir: h.dir("activemq/CVE-2023-46604"),
 		Ports: []compose.PortMapping{{HostPort: 8161, ContainerPort: 8161, Protocol: "tcp"}},
 	}}
 
@@ -363,6 +363,54 @@ func TestDelAnnouncesWhatWillBeRemoved(t *testing.T) {
 	}}
 
 	h.run("del", "-y", "1").requireCode(t, 0).requireOut(t, "activemq-cve-2023-46604-web-1")
+}
+
+// `docker compose up -d` 只要容器**创建**成功就返回 0，哪怕它下一秒就退出。
+// 不说这一句的话，用户看到"正在启动"紧跟 status 里的"没有运行中的靶场"，
+// 中间没有任何解释——他只能猜是不是镜像坏了。
+func TestUpWarnsWhenTheContainerDidNotStayUp(t *testing.T) {
+	h := newHarness(t)
+	h.seedVulfocus("nacos-auth-bypass=8848")
+	h.compose.containers = []compose.Container{{
+		Name: "nacos-auth-bypass-target-1", Service: "target",
+		State: "exited", ExitCode: 1,
+		WorkDir: h.vulfocusDir("nacos-auth-bypass"),
+	}}
+
+	r := h.run("up", "vulfocus/nacos-auth-bypass").requireCode(t, 0)
+	r.requireErr(t, "没有处于运行状态")
+	r.requireErr(t, "nacos-auth-bypass-target-1")
+	r.requireErr(t, "退出码 1")
+}
+
+func TestUpDoesNotWarnWhenTheContainerIsRunning(t *testing.T) {
+	h := newHarness(t)
+	h.seedVulfocus("nacos-auth-bypass=8848")
+	h.compose.containers = []compose.Container{{
+		Name: "nacos-auth-bypass-target-1", Service: "target", State: "running",
+		WorkDir: h.vulfocusDir("nacos-auth-bypass"),
+		Ports:   []compose.PortMapping{{HostPort: 8848, ContainerPort: 8848, Protocol: "tcp"}},
+	}}
+
+	r := h.run("up", "vulfocus/nacos-auth-bypass").requireCode(t, 0)
+	r.requireNoErr(t, "没有处于运行状态")
+	r.requireOut(t, "8848")
+}
+
+// del 报出的"将要删除"必须连**已退出**的容器一起列——`down` 会把它们一并删掉，
+// 只报运行中的会少报。
+func TestDelAnnouncesStoppedContainersToo(t *testing.T) {
+	h := newHarness(t)
+	h.seedVulfocus("nacos-auth-bypass=8848")
+	h.compose.containers = []compose.Container{{
+		Name: "nacos-auth-bypass-target-1", Service: "target",
+		State: "exited", ExitCode: 1,
+		WorkDir: h.vulfocusDir("nacos-auth-bypass"),
+	}}
+
+	h.run("del", "-y", "vulfocus/nacos-auth-bypass").
+		requireCode(t, 0).
+		requireOut(t, "nacos-auth-bypass-target-1")
 }
 
 // writeIndex 直接落一份索引文件，用于构造"编号已分配但靶场已消失"这类状态。

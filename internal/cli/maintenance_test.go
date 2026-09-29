@@ -133,8 +133,8 @@ func TestUpdateReportsRunningEnvironmentsThatChanged(t *testing.T) {
 
 	h.git.changed = []string{"a/one/docker-compose.yml"}
 	h.compose.containers = []compose.Container{
-		{Name: "a-one-1", WorkDir: h.dir("a/one")},
-		{Name: "b-two-1", WorkDir: h.dir("b/two")},
+		{Name: "a-one-1", State: "running", WorkDir: h.dir("a/one")},
+		{Name: "b-two-1", State: "running", WorkDir: h.dir("b/two")},
 	}
 
 	r := h.run("update").requireCode(t, 0)
